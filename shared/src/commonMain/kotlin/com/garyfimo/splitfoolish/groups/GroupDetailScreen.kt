@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -219,9 +220,14 @@ private fun ExpenseRow(
 
 @Composable
 private fun SettlementSection(group: EditableGroup) {
-    // Compose tracks every mutableStateOf read inside toDomain(), so recomposition recomputes this
-    // whenever any group/member/expense field changes — no explicit cache key needed.
-    val settlement = computeSettlement(group.toDomain())
+    // derivedStateOf makes Compose actually re-subscribe to every state read inside the lambda
+    // (amountInput, payerId, splitMode, each participant's `included`, the expenses/members lists).
+    // Without it, EditableGroup is an unstable class without @Stable, so callers of this composable
+    // can skip recomposition even when its contents change — which showed up as the settlement
+    // freezing on an older value after expenses were added or edited.
+    val settlement by remember(group) {
+        derivedStateOf { computeSettlement(group.toDomain()) }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Settlement", style = MaterialTheme.typography.titleMedium)
