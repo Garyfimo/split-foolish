@@ -39,6 +39,7 @@ fun GroupDetailScreen(
     group: EditableGroup,
 ) {
     var showAddMember by remember { mutableStateOf(false) }
+    var memberPendingRemoval by remember { mutableStateOf<EditableMember?>(null) }
 
     Column(
         modifier = Modifier
@@ -63,6 +64,14 @@ fun GroupDetailScreen(
         MembersSection(
             group = group,
             onAddMember = { showAddMember = true },
+            onRemoveMember = { member ->
+                val impact = group.previewMemberRemoval(member.id)
+                if (impact.isDestructive) {
+                    memberPendingRemoval = member
+                } else {
+                    group.removeMemberCascade(member.id)
+                }
+            },
         )
 
         ExpensesSection(
@@ -90,12 +99,25 @@ fun GroupDetailScreen(
             },
         )
     }
+
+    memberPendingRemoval?.let { member ->
+        ConfirmRemoveMemberDialog(
+            member = member,
+            impact = group.previewMemberRemoval(member.id),
+            onDismiss = { memberPendingRemoval = null },
+            onConfirm = {
+                group.removeMemberCascade(member.id)
+                memberPendingRemoval = null
+            },
+        )
+    }
 }
 
 @Composable
 private fun MembersSection(
     group: EditableGroup,
     onAddMember: () -> Unit,
+    onRemoveMember: (EditableMember) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Members", style = MaterialTheme.typography.titleMedium)
@@ -114,7 +136,7 @@ private fun MembersSection(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { group.members.removeAll { it.id == member.id } }) {
+                    OutlinedButton(onClick = { onRemoveMember(member) }) {
                         Text("Remove")
                     }
                 }
@@ -235,6 +257,34 @@ private fun SettlementSection(group: EditableGroup) {
             }
         }
     }
+}
+
+@Composable
+private fun ConfirmRemoveMemberDialog(
+    member: EditableMember,
+    impact: MemberRemovalImpact,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove ${member.name.ifBlank { "member" }}?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (impact.expensesToDelete > 0) {
+                    val noun = if (impact.expensesToDelete == 1) "expense" else "expenses"
+                    Text("• ${impact.expensesToDelete} $noun they paid for will be deleted.")
+                }
+                if (impact.expensesToUpdate > 0) {
+                    val noun = if (impact.expensesToUpdate == 1) "other expense" else "other expenses"
+                    Text("• They will be removed from ${impact.expensesToUpdate} $noun.")
+                }
+                Text("This can't be undone.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

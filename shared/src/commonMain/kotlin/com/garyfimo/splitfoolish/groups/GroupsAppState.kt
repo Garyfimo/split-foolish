@@ -47,6 +47,18 @@ class EditableExpense(
         mutableStateListOf<EditableExpenseParticipant>().apply { addAll(participants) }
 }
 
+/**
+ * What will happen if a given member is removed. [expensesToDelete] counts expenses they paid for
+ * (no way to auto-pick a replacement payer, so those have to go); [expensesToUpdate] counts the
+ * other expenses where they're only a participant (we strip them from the participant list).
+ */
+data class MemberRemovalImpact(
+    val expensesToDelete: Int,
+    val expensesToUpdate: Int,
+) {
+    val isDestructive: Boolean get() = expensesToDelete > 0 || expensesToUpdate > 0
+}
+
 class EditableGroup(
     val id: Long,
     name: String,
@@ -54,6 +66,30 @@ class EditableGroup(
     var name: String by mutableStateOf(name)
     val members: SnapshotStateList<EditableMember> = mutableStateListOf()
     val expenses: SnapshotStateList<EditableExpense> = mutableStateListOf()
+
+    fun previewMemberRemoval(memberId: Long): MemberRemovalImpact {
+        var deletes = 0
+        var updates = 0
+        for (expense in expenses) {
+            if (expense.payerId == memberId) {
+                deletes++
+            } else if (expense.participants.any { it.memberId == memberId }) {
+                updates++
+            }
+        }
+        return MemberRemovalImpact(deletes, updates)
+    }
+
+    /**
+     * Remove a member and cascade-clean every reference to them so the settlement can't silently
+     * drop money: expenses they paid for are deleted (we can't guess a replacement payer), and they
+     * are stripped from any other expense's participant list.
+     */
+    fun removeMemberCascade(memberId: Long) {
+        expenses.removeAll { it.payerId == memberId }
+        expenses.forEach { it.participants.removeAll { ep -> ep.memberId == memberId } }
+        members.removeAll { it.id == memberId }
+    }
 
     /** Snapshot current editor state as an immutable [Group] so [computeSettlement] can run on it. */
     fun toDomain(): Group = Group(
