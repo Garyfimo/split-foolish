@@ -1,0 +1,85 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+!**/src/**/*.gradle.kts
+local.properties
+
+# Kotlin
+.kotlin/
+*.kotlin_module
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+output.json
+release/
+proguard/
+*.jks
+*.keystore
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.navigation/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode / iOS
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+iosApp/Pods/
+iosApp/Podfile.lock
+iosApp/*.xcworkspace/xcuserdata/
+iosApp/*.xcodeproj/xcuserdata/
+iosApp/*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Kotlin/Native
+*.konan/
+konan/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Logs
+*.log
+hs_err_pid*
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+*.p12
+
+# Node (if any JS targets)
+node_modules/
