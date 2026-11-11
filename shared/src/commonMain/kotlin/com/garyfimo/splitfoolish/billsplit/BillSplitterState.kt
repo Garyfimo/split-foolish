@@ -32,23 +32,23 @@ class BillSplitterState {
     val totalCents: Long? get() = parseAmountToCents(totalInput)
 
     /**
-     * In percentage mode the last row always auto-balances to 100 − sum(others);
-     * the stored percentInput on the last row is ignored while it holds that position.
+     * In percentage mode the last row (including the sole row when there is just one participant)
+     * always auto-balances to 100 − sum(others); the stored percentInput on that row is ignored
+     * while it holds that position. `isAutoBalanced` is the single source of truth so the UI
+     * (read-only field) and the result computation can't drift apart.
      */
     fun displayedPercent(index: Int): Double {
         val raw = participants.getOrNull(index) ?: return 0.0
-        return if (mode == SplitMode.Percentage && index == participants.lastIndex && participants.size > 1) {
+        return if (isAutoBalanced(index)) {
             val othersSum = participants.take(index).sumOf { it.percentInput.toDoubleOrNull() ?: 0.0 }
             100.0 - othersSum
-        } else if (mode == SplitMode.Percentage && participants.size == 1) {
-            100.0
         } else {
             raw.percentInput.toDoubleOrNull() ?: 0.0
         }
     }
 
     fun isAutoBalanced(index: Int): Boolean =
-        mode == SplitMode.Percentage && index == participants.lastIndex && participants.size > 1
+        mode == SplitMode.Percentage && index == participants.lastIndex
 
     fun addParticipant() {
         if (mode == SplitMode.Percentage && participants.isNotEmpty()) {

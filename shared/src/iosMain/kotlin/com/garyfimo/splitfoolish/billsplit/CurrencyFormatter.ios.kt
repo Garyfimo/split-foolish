@@ -4,9 +4,12 @@ import platform.Foundation.NSNumber
 import platform.Foundation.NSNumberFormatter
 import platform.Foundation.NSNumberFormatterCurrencyStyle
 
-actual fun formatCents(cents: Long): String {
-    val formatter = NSNumberFormatter().apply {
-        numberStyle = NSNumberFormatterCurrencyStyle
-    }
-    return formatter.stringFromNumber(NSNumber(double = cents / 100.0)) ?: "$cents"
+private fun currencyFormatter(): NSNumberFormatter = NSNumberFormatter().apply {
+    numberStyle = NSNumberFormatterCurrencyStyle
 }
+
+actual fun formatCents(cents: Long): String =
+    currencyFormatter().stringFromNumber(NSNumber(double = cents / 100.0)) ?: "$cents"
+
+actual fun currencySymbol(): String =
+    currencyFormatter().currencySymbol

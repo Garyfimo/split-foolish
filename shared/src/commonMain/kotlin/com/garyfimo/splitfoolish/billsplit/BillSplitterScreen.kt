@@ -62,7 +62,7 @@ private fun TotalField(state: BillSplitterState) {
         value = state.totalInput,
         onValueChange = { state.totalInput = it },
         label = { Text("Total amount") },
-        prefix = { Text("$") },
+        prefix = { Text(currencySymbol()) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         isError = state.totalInput.isNotBlank() && state.totalCents == null,
