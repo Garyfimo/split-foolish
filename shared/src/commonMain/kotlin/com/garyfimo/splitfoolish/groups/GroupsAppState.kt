@@ -8,14 +8,28 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import com.garyfimo.splitfoolish.billsplit.SplitMode
 import com.garyfimo.splitfoolish.billsplit.parseAmountToCents
 
-/** Routes the single Compose tree between the three screens without pulling in a nav library. */
+/** Routes the single Compose tree between the four screens without pulling in a nav library. */
 sealed class Screen {
     data object GroupsList : Screen()
+    data object Friends : Screen()
     data class GroupDetail(val groupId: Long) : Screen()
     data class ExpenseEditor(val groupId: Long, val expenseId: Long?) : Screen()
 }
 
 class EditableMember(
+    val id: Long,
+    name: String,
+) {
+    var name: String by mutableStateOf(name)
+}
+
+/**
+ * A friend lives in a global list, independent of any group. Picking a friend when adding a group
+ * member copies the current name into a new [EditableMember]; later edits on either side don't
+ * propagate. This keeps removal simple — no cascade — at the cost of not being able to ask "which
+ * groups is Alice in?" without a lookup pass. Fine for V1.
+ */
+class EditableFriend(
     val id: Long,
     name: String,
 ) {
@@ -125,6 +139,7 @@ class GroupsAppState {
 
     var screen: Screen by mutableStateOf(Screen.GroupsList)
     val groups: SnapshotStateList<EditableGroup> = mutableStateListOf()
+    val friends: SnapshotStateList<EditableFriend> = mutableStateListOf()
 
     fun createGroup(name: String): EditableGroup {
         val group = EditableGroup(nextId(), name)
@@ -140,4 +155,14 @@ class GroupsAppState {
 
     fun findExpense(groupId: Long, expenseId: Long): EditableExpense? =
         findGroup(groupId)?.expenses?.firstOrNull { it.id == expenseId }
+
+    fun addFriend(name: String): EditableFriend {
+        val friend = EditableFriend(nextId(), name)
+        friends.add(friend)
+        return friend
+    }
+
+    fun removeFriend(id: Long) {
+        friends.removeAll { it.id == id }
+    }
 }

@@ -41,7 +41,17 @@ fun GroupsListScreen(state: GroupsAppState) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Groups", style = MaterialTheme.typography.headlineMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Groups",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(onClick = { state.screen = Screen.Friends }) {
+                val count = state.friends.size
+                Text(if (count == 0) "Friends" else "Friends ($count)")
+            }
+        }
 
         if (state.groups.isEmpty()) {
             Text(

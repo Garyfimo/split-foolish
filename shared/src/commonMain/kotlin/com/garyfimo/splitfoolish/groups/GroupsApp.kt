@@ -19,6 +19,7 @@ fun GroupsApp(
         ) {
             when (val screen = state.screen) {
                 Screen.GroupsList -> GroupsListScreen(state)
+                Screen.Friends -> FriendsScreen(state)
                 is Screen.GroupDetail -> {
                     val group = state.findGroup(screen.groupId)
                     if (group == null) {
