@@ -12,27 +12,29 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.garyfimo.splitfoolish.ui.SplitFoolishTheme
 
 @Composable
 fun BillSplitterScreen(
     state: BillSplitterState = remember { BillSplitterState() },
 ) {
-    MaterialTheme {
+    SplitFoolishTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
@@ -75,38 +77,23 @@ private fun TotalField(state: BillSplitterState) {
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ModeSelector(state: BillSplitterState) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Split by", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModeChoice(
-                label = "Equal",
-                selected = state.mode == SplitMode.Equal,
-                onClick = { state.mode = SplitMode.Equal },
+            ToggleButton(
+                checked = state.mode == SplitMode.Equal,
+                onCheckedChange = { if (it) state.mode = SplitMode.Equal },
                 modifier = Modifier.weight(1f),
-            )
-            ModeChoice(
-                label = "Percentage",
-                selected = state.mode == SplitMode.Percentage,
-                onClick = { state.mode = SplitMode.Percentage },
+            ) { Text("Equal") }
+            ToggleButton(
+                checked = state.mode == SplitMode.Percentage,
+                onCheckedChange = { if (it) state.mode = SplitMode.Percentage },
                 modifier = Modifier.weight(1f),
-            )
+            ) { Text("Percentage") }
         }
-    }
-}
-
-@Composable
-private fun ModeChoice(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (selected) {
-        Button(onClick = onClick, modifier = modifier) { Text(label) }
-    } else {
-        OutlinedButton(onClick = onClick, modifier = modifier) { Text(label) }
     }
 }
 
