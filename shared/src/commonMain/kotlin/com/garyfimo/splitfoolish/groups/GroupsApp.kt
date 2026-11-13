@@ -7,12 +7,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import com.garyfimo.splitfoolish.ui.SplitFoolishTheme
 
 @Composable
 fun GroupsApp(
     state: GroupsAppState = remember { GroupsAppState() },
 ) {
-    MaterialTheme {
+    SplitFoolishTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,

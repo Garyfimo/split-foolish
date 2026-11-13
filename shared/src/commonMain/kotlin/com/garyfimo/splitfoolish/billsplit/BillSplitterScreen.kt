@@ -27,12 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.garyfimo.splitfoolish.ui.SplitFoolishTheme
 
 @Composable
 fun BillSplitterScreen(
     state: BillSplitterState = remember { BillSplitterState() },
 ) {
-    MaterialTheme {
+    SplitFoolishTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
