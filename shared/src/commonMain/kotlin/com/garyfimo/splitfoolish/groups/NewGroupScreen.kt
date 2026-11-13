@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,11 +15,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -32,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewGroupScreen(state: GroupsAppState) {
     var name by remember { mutableStateOf("") }
@@ -40,60 +43,63 @@ fun NewGroupScreen(state: GroupsAppState) {
 
     val canCreate = name.isNotBlank() && selectedFriendIds.isNotEmpty()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { state.screen = Screen.GroupsList }) { Text("← Back") }
-        }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("New group") },
+                navigationIcon = { BackIconButton(onClick = { state.screen = Screen.GroupsList }) },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Group name (e.g. Beach trip)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        Text("New group", style = MaterialTheme.typography.headlineMedium)
+            FriendPickerSection(
+                friends = state.friends,
+                selectedFriendIds = selectedFriendIds,
+                onAddFriend = { showAddFriendDialog = true },
+            )
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Group name (e.g. Beach trip)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        FriendPickerSection(
-            friends = state.friends,
-            selectedFriendIds = selectedFriendIds,
-            onAddFriend = { showAddFriendDialog = true },
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    val group = state.createGroup(name.trim())
-                    selectedFriendIds.forEach { friendId ->
-                        val friend = state.friends.firstOrNull { it.id == friendId } ?: return@forEach
-                        group.members.add(EditableMember(state.nextId(), friend.name.trim()))
-                    }
-                    state.screen = Screen.GroupDetail(group.id)
-                },
-                enabled = canCreate,
-                modifier = Modifier.weight(1f),
-            ) { Text("Create") }
-            OutlinedButton(
-                onClick = { state.screen = Screen.GroupsList },
-                modifier = Modifier.weight(1f),
-            ) { Text("Cancel") }
-        }
-
-        if (!canCreate) {
-            val hint = when {
-                name.isBlank() && selectedFriendIds.isEmpty() -> "Enter a name and pick at least one friend."
-                name.isBlank() -> "Enter a group name."
-                else -> "Pick at least one friend."
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val group = state.createGroup(name.trim())
+                        selectedFriendIds.forEach { friendId ->
+                            val friend = state.friends.firstOrNull { it.id == friendId } ?: return@forEach
+                            group.members.add(EditableMember(state.nextId(), friend.name.trim()))
+                        }
+                        state.screen = Screen.GroupDetail(group.id)
+                    },
+                    enabled = canCreate,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Create") }
+                OutlinedButton(
+                    onClick = { state.screen = Screen.GroupsList },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Cancel") }
             }
-            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+
+            if (!canCreate) {
+                val hint = when {
+                    name.isBlank() && selectedFriendIds.isEmpty() -> "Enter a name and pick at least one friend."
+                    name.isBlank() -> "Enter a group name."
+                    else -> "Pick at least one friend."
+                }
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 

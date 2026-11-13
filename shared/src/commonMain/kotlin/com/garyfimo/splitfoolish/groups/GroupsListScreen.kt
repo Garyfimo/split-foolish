@@ -7,62 +7,68 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupsListScreen(state: GroupsAppState) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Groups",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.weight(1f),
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Groups") },
+                actions = {
+                    TextButton(onClick = { state.screen = Screen.Friends }) {
+                        val count = state.friends.size
+                        Text(if (count == 0) "Friends" else "Friends ($count)")
+                    }
+                },
             )
-            OutlinedButton(onClick = { state.screen = Screen.Friends }) {
-                val count = state.friends.size
-                Text(if (count == 0) "Friends" else "Friends ($count)")
-            }
-        }
-
-        if (state.groups.isEmpty()) {
-            Text(
-                "No groups yet. Create one to start tracking shared expenses.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        } else {
-            state.groups.forEach { group ->
-                GroupRow(
-                    group = group,
-                    onOpen = { state.screen = Screen.GroupDetail(group.id) },
-                    onDelete = { state.deleteGroup(group.id) },
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.groups.isEmpty()) {
+                Text(
+                    "No groups yet. Create one to start tracking shared expenses.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
+            } else {
+                state.groups.forEach { group ->
+                    GroupRow(
+                        group = group,
+                        onOpen = { state.screen = Screen.GroupDetail(group.id) },
+                        onDelete = { state.deleteGroup(group.id) },
+                    )
+                }
             }
-        }
 
-        Button(
-            onClick = { state.screen = Screen.NewGroup },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("+ New group") }
+            Button(
+                onClick = { state.screen = Screen.NewGroup },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("+ New group") }
+        }
     }
 }
 

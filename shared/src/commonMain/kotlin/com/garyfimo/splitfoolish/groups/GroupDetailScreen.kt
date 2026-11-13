@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,12 +14,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.garyfimo.splitfoolish.billsplit.formatCents
 import kotlin.math.abs
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupDetailScreen(
     state: GroupsAppState,
@@ -42,27 +45,31 @@ fun GroupDetailScreen(
     var showAddMember by remember { mutableStateOf(false) }
     var memberPendingRemoval by remember { mutableStateOf<EditableMember?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { state.screen = Screen.GroupsList }) { Text("← Back") }
-        }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(group.name.ifBlank { "Group" }) },
+                navigationIcon = { BackIconButton(onClick = { state.screen = Screen.GroupsList }) },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = group.name,
+                onValueChange = { group.name = it },
+                label = { Text("Group name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        OutlinedTextField(
-            value = group.name,
-            onValueChange = { group.name = it },
-            label = { Text("Group name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        MembersSection(
+            MembersSection(
             group = group,
             onAddMember = { showAddMember = true },
             onRemoveMember = { member ->
@@ -88,7 +95,8 @@ fun GroupDetailScreen(
             onDelete = { expense -> group.expenses.removeAll { it.id == expense.id } },
         )
 
-        SettlementSection(group)
+            SettlementSection(group)
+        }
     }
 
     if (showAddMember) {

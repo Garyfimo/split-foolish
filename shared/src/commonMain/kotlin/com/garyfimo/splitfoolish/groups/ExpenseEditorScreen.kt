@@ -7,19 +7,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.garyfimo.splitfoolish.billsplit.SplitMode
 import com.garyfimo.splitfoolish.billsplit.currencySymbol
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseEditorScreen(
     state: GroupsAppState,
@@ -66,59 +69,59 @@ fun ExpenseEditorScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeContentPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { state.screen = Screen.GroupDetail(group.id) }) {
-                Text("← Back")
-            }
-        }
-
-        Text(
-            if (expenseId == null) "New expense" else "Edit expense",
-            style = MaterialTheme.typography.headlineSmall,
-        )
-
-        OutlinedTextField(
-            value = expense.title,
-            onValueChange = { expense.title = it },
-            label = { Text("Title (e.g. Dinner, Gas)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        OutlinedTextField(
-            value = expense.amountInput,
-            onValueChange = { expense.amountInput = it },
-            label = { Text("Amount") },
-            prefix = { Text(currencySymbol()) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        PayerSelector(group, expense)
-        SplitModeToggle(expense)
-        ParticipantsEditor(group, expense)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { state.screen = Screen.GroupDetail(group.id) },
-                modifier = Modifier.weight(1f),
-            ) { Text("Done") }
-            OutlinedButton(
-                onClick = {
-                    group.expenses.removeAll { it.id == expense.id }
-                    state.screen = Screen.GroupDetail(group.id)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (expenseId == null) "New expense" else "Edit expense") },
+                navigationIcon = {
+                    BackIconButton(onClick = { state.screen = Screen.GroupDetail(group.id) })
                 },
-                modifier = Modifier.weight(1f),
-            ) { Text(if (expenseId == null) "Discard" else "Delete") }
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = expense.title,
+                onValueChange = { expense.title = it },
+                label = { Text("Title (e.g. Dinner, Gas)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = expense.amountInput,
+                onValueChange = { expense.amountInput = it },
+                label = { Text("Amount") },
+                prefix = { Text(currencySymbol()) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            PayerSelector(group, expense)
+            SplitModeToggle(expense)
+            ParticipantsEditor(group, expense)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { state.screen = Screen.GroupDetail(group.id) },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Done") }
+                OutlinedButton(
+                    onClick = {
+                        group.expenses.removeAll { it.id == expense.id }
+                        state.screen = Screen.GroupDetail(group.id)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (expenseId == null) "Discard" else "Delete") }
+            }
         }
     }
 }
