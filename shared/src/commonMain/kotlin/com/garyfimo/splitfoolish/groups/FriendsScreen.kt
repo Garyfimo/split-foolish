@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -94,10 +97,15 @@ fun FriendsScreen(state: GroupsAppState) {
 
 @Composable
 internal fun BackIconButton(onClick: () -> Unit) {
-    // material-icons-core isn't a dep; a left-arrow glyph inside an IconButton gives the same
-    // 48dp hit target and TopAppBar slot alignment without pulling in another artifact.
+    // Icons.AutoMirrored.Filled.ArrowBack flips for RTL locales (Arabic/Hebrew read right-to-left,
+    // so "back" points the other way). contentDescription wins the TalkBack / VoiceOver
+    // announcement — a plain Text("←") would be read out as "leftwards arrow" with no semantic
+    // affordance for "back", and would not mirror.
     IconButton(onClick = onClick) {
-        Text("←", style = MaterialTheme.typography.titleLarge)
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+        )
     }
 }
 
