@@ -93,8 +93,10 @@ fun GroupDetailScreen(
 
     if (showAddMember) {
         AddMemberDialog(
+            friends = state.friends,
+            existingMemberNames = group.members.map { it.name.trim() }.toSet(),
             onDismiss = { showAddMember = false },
-            onConfirm = { name ->
+            onAdd = { name ->
                 group.members.add(EditableMember(state.nextId(), name))
                 showAddMember = false
             },
@@ -295,24 +297,41 @@ private fun ConfirmRemoveMemberDialog(
 
 @Composable
 private fun AddMemberDialog(
+    friends: List<EditableFriend>,
+    existingMemberNames: Set<String>,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+    onAdd: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    // Hide friends whose name is already in the group — their row wouldn't do anything useful.
+    val pickable = friends.filter { it.name.trim().isNotEmpty() && it.name.trim() !in existingMemberNames }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add member") },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Name") },
-                singleLine = true,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (pickable.isNotEmpty()) {
+                    Text("Pick a friend", style = MaterialTheme.typography.labelLarge)
+                    pickable.forEach { friend ->
+                        OutlinedButton(
+                            onClick = { onAdd(friend.name.trim()) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(friend.name.trim()) }
+                    }
+                    Text("Or type a name", style = MaterialTheme.typography.labelLarge)
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                )
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (name.isNotBlank()) onConfirm(name.trim()) },
+                onClick = { if (name.isNotBlank()) onAdd(name.trim()) },
                 enabled = name.isNotBlank(),
             ) { Text("Add") }
         },
