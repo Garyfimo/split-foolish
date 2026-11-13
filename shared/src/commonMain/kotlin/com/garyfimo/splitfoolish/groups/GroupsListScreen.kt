@@ -1,0 +1,147 @@
+package com.garyfimo.splitfoolish.groups
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun GroupsListScreen(state: GroupsAppState) {
+    var showNewDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .safeContentPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text("Groups", style = MaterialTheme.typography.headlineMedium)
+
+        if (state.groups.isEmpty()) {
+            Text(
+                "No groups yet. Create one to start tracking shared expenses.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            state.groups.forEach { group ->
+                GroupRow(
+                    group = group,
+                    onOpen = { state.screen = Screen.GroupDetail(group.id) },
+                    onDelete = { state.deleteGroup(group.id) },
+                )
+            }
+        }
+
+        Button(
+            onClick = { showNewDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("+ New group") }
+    }
+
+    if (showNewDialog) {
+        NewGroupDialog(
+            onDismiss = { showNewDialog = false },
+            onConfirm = { name ->
+                val group = state.createGroup(name)
+                showNewDialog = false
+                state.screen = Screen.GroupDetail(group.id)
+            },
+        )
+    }
+}
+
+@Composable
+private fun GroupRow(
+    group: EditableGroup,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(group.name, style = MaterialTheme.typography.titleMedium)
+                val memberSummary = when (group.members.size) {
+                    0 -> "No members yet"
+                    1 -> "1 member"
+                    else -> "${group.members.size} members"
+                }
+                val expenseSummary = when (group.expenses.size) {
+                    0 -> "no expenses"
+                    1 -> "1 expense"
+                    else -> "${group.expenses.size} expenses"
+                }
+                Text(
+                    "$memberSummary · $expenseSummary",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onOpen) { Text("Open") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = onDelete) { Text("Delete") }
+        }
+    }
+}
+
+@Composable
+private fun NewGroupDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New group") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Group name (e.g. Beach trip)") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onConfirm(name.trim()) },
+                enabled = name.isNotBlank(),
+            ) { Text("Create") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
