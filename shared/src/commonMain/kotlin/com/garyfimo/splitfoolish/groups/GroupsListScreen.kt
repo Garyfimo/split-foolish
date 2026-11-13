@@ -11,28 +11,19 @@ import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun GroupsListScreen(state: GroupsAppState) {
-    var showNewDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -69,20 +60,9 @@ fun GroupsListScreen(state: GroupsAppState) {
         }
 
         Button(
-            onClick = { showNewDialog = true },
+            onClick = { state.screen = Screen.NewGroup },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("+ New group") }
-    }
-
-    if (showNewDialog) {
-        NewGroupDialog(
-            onDismiss = { showNewDialog = false },
-            onConfirm = { name ->
-                val group = state.createGroup(name)
-                showNewDialog = false
-                state.screen = Screen.GroupDetail(group.id)
-            },
-        )
     }
 }
 
@@ -125,33 +105,4 @@ private fun GroupRow(
             OutlinedButton(onClick = onDelete) { Text("Delete") }
         }
     }
-}
-
-@Composable
-private fun NewGroupDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New group") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Group name (e.g. Beach trip)") },
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onConfirm(name.trim()) },
-                enabled = name.isNotBlank(),
-            ) { Text("Create") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
 }

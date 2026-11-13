@@ -8,10 +8,11 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import com.garyfimo.splitfoolish.billsplit.SplitMode
 import com.garyfimo.splitfoolish.billsplit.parseAmountToCents
 
-/** Routes the single Compose tree between the four screens without pulling in a nav library. */
+/** Routes the single Compose tree between the five screens without pulling in a nav library. */
 sealed class Screen {
     data object GroupsList : Screen()
     data object Friends : Screen()
+    data object NewGroup : Screen()
     data class GroupDetail(val groupId: Long) : Screen()
     data class ExpenseEditor(val groupId: Long, val expenseId: Long?) : Screen()
 }
