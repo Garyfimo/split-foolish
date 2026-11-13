@@ -14,10 +14,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -142,33 +144,24 @@ private fun PayerSelector(group: EditableGroup, expense: EditableExpense) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SplitModeToggle(expense: EditableExpense) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Split", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (expense.splitMode == SplitMode.Equal) {
-                Button(
-                    onClick = { expense.splitMode = SplitMode.Equal },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Equal") }
-            } else {
-                OutlinedButton(
-                    onClick = { expense.splitMode = SplitMode.Equal },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Equal") }
-            }
-            if (expense.splitMode == SplitMode.Percentage) {
-                Button(
-                    onClick = { expense.splitMode = SplitMode.Percentage },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Percentage") }
-            } else {
-                OutlinedButton(
-                    onClick = { expense.splitMode = SplitMode.Percentage },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Percentage") }
-            }
+            // ToggleButton morphs its corner shape while pressed/checked — the signature
+            // Expressive animation. See MaterialTheme.motionScheme / shapeByInteraction.
+            ToggleButton(
+                checked = expense.splitMode == SplitMode.Equal,
+                onCheckedChange = { if (it) expense.splitMode = SplitMode.Equal },
+                modifier = Modifier.weight(1f),
+            ) { Text("Equal") }
+            ToggleButton(
+                checked = expense.splitMode == SplitMode.Percentage,
+                onCheckedChange = { if (it) expense.splitMode = SplitMode.Percentage },
+                modifier = Modifier.weight(1f),
+            ) { Text("Percentage") }
         }
     }
 }
