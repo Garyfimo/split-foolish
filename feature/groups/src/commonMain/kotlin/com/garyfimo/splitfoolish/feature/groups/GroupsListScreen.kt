@@ -31,8 +31,8 @@ fun GroupsListScreen(
     groups: List<EditableGroup>,
     friendCount: Int,
     onOpenFriends: () -> Unit,
-    onOpenGroup: (groupId: Long) -> Unit,
-    onDeleteGroup: (groupId: Long) -> Unit,
+    onOpenGroup: (groupId: String) -> Unit,
+    onDeleteGroup: (groupId: String) -> Unit,
     onNewGroup: () -> Unit,
 ) {
     Scaffold(

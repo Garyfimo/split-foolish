@@ -41,11 +41,11 @@ import com.garyfimo.splitfoolish.feature.friends.EditableFriend
 fun NewGroupScreen(
     friends: List<EditableFriend>,
     onAddFriend: (name: String) -> EditableFriend,
-    onCreateGroup: (name: String, selectedFriendIds: List<Long>) -> Unit,
+    onCreateGroup: (name: String, selectedFriendIds: List<String>) -> Unit,
     onBack: () -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-    val selectedFriendIds: SnapshotStateList<Long> = remember { mutableStateListOf() }
+    val selectedFriendIds: SnapshotStateList<String> = remember { mutableStateListOf() }
     var showAddFriendDialog by remember { mutableStateOf(false) }
 
     val canCreate = name.isNotBlank() && selectedFriendIds.isNotEmpty()
@@ -118,7 +118,7 @@ fun NewGroupScreen(
 @Composable
 private fun FriendPickerSection(
     friends: List<EditableFriend>,
-    selectedFriendIds: SnapshotStateList<Long>,
+    selectedFriendIds: SnapshotStateList<String>,
     onAddFriend: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

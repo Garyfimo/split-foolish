@@ -9,14 +9,14 @@ import com.garyfimo.splitfoolish.core.billsplit.SplitMode
 import com.garyfimo.splitfoolish.core.billsplit.parseAmountToCents
 
 class EditableMember(
-    val id: Long,
+    val id: String,
     name: String,
 ) {
     var name: String by mutableStateOf(name)
 }
 
 class EditableExpenseParticipant(
-    val memberId: Long,
+    val memberId: String,
     included: Boolean,
     percentInput: String,
 ) {
@@ -25,16 +25,16 @@ class EditableExpenseParticipant(
 }
 
 class EditableExpense(
-    val id: Long,
+    val id: String,
     title: String,
     amountInput: String,
-    payerId: Long,
+    payerId: String,
     splitMode: SplitMode,
     participants: List<EditableExpenseParticipant>,
 ) {
     var title: String by mutableStateOf(title)
     var amountInput: String by mutableStateOf(amountInput)
-    var payerId: Long by mutableStateOf(payerId)
+    var payerId: String by mutableStateOf(payerId)
     var splitMode: SplitMode by mutableStateOf(splitMode)
     val participants: SnapshotStateList<EditableExpenseParticipant> =
         mutableStateListOf<EditableExpenseParticipant>().apply { addAll(participants) }
@@ -53,14 +53,14 @@ data class MemberRemovalImpact(
 }
 
 class EditableGroup(
-    val id: Long,
+    val id: String,
     name: String,
 ) {
     var name: String by mutableStateOf(name)
     val members: SnapshotStateList<EditableMember> = mutableStateListOf()
     val expenses: SnapshotStateList<EditableExpense> = mutableStateListOf()
 
-    fun previewMemberRemoval(memberId: Long): MemberRemovalImpact {
+    fun previewMemberRemoval(memberId: String): MemberRemovalImpact {
         var deletes = 0
         var updates = 0
         for (expense in expenses) {
@@ -78,7 +78,7 @@ class EditableGroup(
      * drop money: expenses they paid for are deleted (we can't guess a replacement payer), and they
      * are stripped from any other expense's participant list.
      */
-    fun removeMemberCascade(memberId: Long) {
+    fun removeMemberCascade(memberId: String) {
         expenses.removeAll { it.payerId == memberId }
         expenses.forEach { it.participants.removeAll { ep -> ep.memberId == memberId } }
         members.removeAll { it.id == memberId }

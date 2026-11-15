@@ -35,7 +35,7 @@ import com.garyfimo.splitfoolish.core.ui.BackIconButton
 fun FriendsScreen(
     friends: List<EditableFriend>,
     onAddFriend: (name: String) -> Unit,
-    onRemoveFriend: (id: Long) -> Unit,
+    onRemoveFriend: (id: String) -> Unit,
     onBack: () -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
