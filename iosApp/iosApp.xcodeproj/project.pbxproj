@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7D616EF930AA555D00FCCAE5 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 7D616EF830AA555D00FCCAE5 /* FirebaseAuth */; };
+		7D616EFB30AA556300FCCAE5 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D616EFA30AA556300FCCAE5 /* FirebaseCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		AFE65E26F3E4F35BED527DF3 /* SplitFoolish.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SplitFoolish.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -41,6 +46,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7D616EFB30AA556300FCCAE5 /* FirebaseCore in Frameworks */,
+				7D616EF930AA555D00FCCAE5 /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +59,7 @@
 			children = (
 				D710A55972BA3E351BCDF9CF /* Configuration */,
 				3AB62709E0D01CE2FC20CC37 /* iosApp */,
+				7D616EF730AA555D00FCCAE5 /* Frameworks */,
 				60E2216CCC434643F46CEE31 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +70,13 @@
 				AFE65E26F3E4F35BED527DF3 /* SplitFoolish.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7D616EF730AA555D00FCCAE5 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -85,6 +100,8 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				7D616EF830AA555D00FCCAE5 /* FirebaseAuth */,
+				7D616EFA30AA556300FCCAE5 /* FirebaseCore */,
 			);
 			productName = iosApp;
 			productReference = AFE65E26F3E4F35BED527DF3 /* SplitFoolish.app */;
@@ -382,6 +399,19 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7D616EF830AA555D00FCCAE5 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D616EF630AA514A00FCCAE5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		7D616EFA30AA556300FCCAE5 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D616EF630AA514A00FCCAE5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 98EAF17D286DCB4EA434BC8D /* Project object */;
 }
