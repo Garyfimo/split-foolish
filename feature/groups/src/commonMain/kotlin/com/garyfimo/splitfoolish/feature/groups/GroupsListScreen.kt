@@ -34,6 +34,9 @@ fun GroupsListScreen(
     onOpenGroup: (groupId: String) -> Unit,
     onDeleteGroup: (groupId: String) -> Unit,
     onNewGroup: () -> Unit,
+    // Optional so the screen stays reusable in contexts without auth (tests, previews). When
+    // present, a "Sign out" action shows in the TopAppBar — the only sign-out affordance in the app.
+    onSignOut: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -42,6 +45,9 @@ fun GroupsListScreen(
                 actions = {
                     TextButton(onClick = onOpenFriends) {
                         Text(if (friendCount == 0) "Friends" else "Friends ($friendCount)")
+                    }
+                    if (onSignOut != null) {
+                        TextButton(onClick = onSignOut) { Text("Sign out") }
                     }
                 },
             )

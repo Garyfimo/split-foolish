@@ -23,7 +23,6 @@ import com.garyfimo.splitfoolish.feature.groups.EditableMember
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -162,17 +161,4 @@ class AppState(
         },
     )
 
-    companion object {
-        /**
-         * AppState wired to a no-op in-memory repository. For Compose previews and screenshot
-         * tests only — writes evaporate and loads return empty. Uses [MainScope] because that's
-         * trivially cheap and never gets exercised in a preview rendering pass anyway.
-         */
-        fun forPreview(): AppState = AppState(PreviewOnlyRepository, MainScope())
-    }
-}
-
-private object PreviewOnlyRepository : SplitFoolishRepository {
-    override suspend fun loadSnapshot(): AppSnapshot = AppSnapshot(emptyList(), emptyList())
-    override suspend fun saveSnapshot(snapshot: AppSnapshot) = Unit
 }

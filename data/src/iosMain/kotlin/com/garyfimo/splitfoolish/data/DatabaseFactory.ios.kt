@@ -14,11 +14,16 @@ import com.garyfimo.splitfoolish.data.db.SplitFoolishDb
  * don't fire and deleting a group would orphan its members, expenses, and participants in the
  * database file forever.
  */
-fun createSplitFoolishDb(): SplitFoolishDb =
+fun createSplitFoolishDb(
+    // Each signed-in user gets their own SQLite file ("splitfoolish-<uid>.db") so switching
+    // accounts can't leak data across sessions. Callers that don't need per-user scoping (tests,
+    // pre-auth previews) can keep the default.
+    name: String = "splitfoolish.db",
+): SplitFoolishDb =
     SplitFoolishDb(
         NativeSqliteDriver(
             schema = SplitFoolishDb.Schema,
-            name = "splitfoolish.db",
+            name = name,
             onConfiguration = { configuration ->
                 configuration.copy(
                     extendedConfig = configuration.extendedConfig.copy(
