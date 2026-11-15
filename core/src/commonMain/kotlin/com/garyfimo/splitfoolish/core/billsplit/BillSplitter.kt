@@ -6,7 +6,7 @@ import kotlin.math.roundToLong
 enum class SplitMode { Equal, Percentage }
 
 data class Participant(
-    val id: Long,
+    val id: String,
     val name: String,
     val percentage: Double = 0.0,
 )

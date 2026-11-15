@@ -3,7 +3,7 @@ package com.garyfimo.splitfoolish.feature.groups
 import com.garyfimo.splitfoolish.core.billsplit.SplitMode
 
 data class GroupMember(
-    val id: Long,
+    val id: String,
     val name: String,
 )
 
@@ -13,21 +13,21 @@ data class GroupMember(
  * necessarily shares every expense (e.g. one person ordered dessert).
  */
 data class Expense(
-    val id: Long,
+    val id: String,
     val title: String,
     val amountCents: Long,
-    val payerId: Long,
+    val payerId: String,
     val splitMode: SplitMode,
     val participants: List<ExpenseParticipant>,
 )
 
 data class ExpenseParticipant(
-    val memberId: Long,
+    val memberId: String,
     val percentage: Double = 0.0,
 )
 
 data class Group(
-    val id: Long,
+    val id: String,
     val name: String,
     val members: List<GroupMember>,
     val expenses: List<Expense>,

@@ -5,3 +5,9 @@ PRODUCT_BUNDLE_IDENTIFIER=com.garyfimo.splitfoolish.SplitFoolish$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0
+
+// Shared.framework is produced with isStatic = true, so SQLiter's references to the SQLite C
+// API (sqlite3_open_v2, sqlite3_prepare_v2, …) aren't resolved inside the framework itself —
+// they have to be satisfied by the enclosing app's linker. $(inherited) preserves any flags
+// Xcode's defaults add; -lsqlite3 pulls in the system libsqlite3.tbd that SQLiter calls into.
+OTHER_LDFLAGS = $(inherited) -lsqlite3

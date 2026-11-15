@@ -9,19 +9,19 @@ import kotlin.test.assertTrue
 class MemberRemovalTest {
 
     private fun buildGroup(): EditableGroup {
-        val group = EditableGroup(id = 1, name = "Trip")
-        group.members.add(EditableMember(id = 10, name = "Alice"))
-        group.members.add(EditableMember(id = 11, name = "Bob"))
-        group.members.add(EditableMember(id = 12, name = "Charlie"))
+        val group = EditableGroup(id = "g1", name = "Trip")
+        group.members.add(EditableMember(id = "m10", name = "Alice"))
+        group.members.add(EditableMember(id = "m11", name = "Bob"))
+        group.members.add(EditableMember(id = "m12", name = "Charlie"))
         return group
     }
 
     private fun addEqualExpense(
         group: EditableGroup,
-        id: Long,
-        payerId: Long,
+        id: String,
+        payerId: String,
         amountInput: String,
-        amongIds: List<Long>,
+        amongIds: List<String>,
     ) {
         group.expenses.add(
             EditableExpense(
@@ -40,8 +40,8 @@ class MemberRemovalTest {
     @Test
     fun preview_is_non_destructive_when_member_has_no_expenses() {
         val group = buildGroup()
-        addEqualExpense(group, id = 100, payerId = 10, amountInput = "30", amongIds = listOf(10, 11))
-        val impact = group.previewMemberRemoval(memberId = 12)
+        addEqualExpense(group, id = "e100", payerId = "m10", amountInput = "30", amongIds = listOf("m10", "m11"))
+        val impact = group.previewMemberRemoval(memberId = "m12")
         assertEquals(0, impact.expensesToDelete)
         assertEquals(0, impact.expensesToUpdate)
         assertTrue(!impact.isDestructive)
@@ -51,13 +51,13 @@ class MemberRemovalTest {
     fun preview_counts_payer_and_participant_separately() {
         val group = buildGroup()
         // Alice paid for expense 100.
-        addEqualExpense(group, id = 100, payerId = 10, amountInput = "30", amongIds = listOf(10, 11, 12))
+        addEqualExpense(group, id = "e100", payerId = "m10", amountInput = "30", amongIds = listOf("m10", "m11", "m12"))
         // Bob paid for expense 200, Alice is a participant.
-        addEqualExpense(group, id = 200, payerId = 11, amountInput = "15", amongIds = listOf(10, 11))
+        addEqualExpense(group, id = "e200", payerId = "m11", amountInput = "15", amongIds = listOf("m10", "m11"))
         // Charlie paid for 300, Alice NOT a participant.
-        addEqualExpense(group, id = 300, payerId = 12, amountInput = "9", amongIds = listOf(11, 12))
+        addEqualExpense(group, id = "e300", payerId = "m12", amountInput = "9", amongIds = listOf("m11", "m12"))
 
-        val impact = group.previewMemberRemoval(memberId = 10)
+        val impact = group.previewMemberRemoval(memberId = "m10")
         assertEquals(1, impact.expensesToDelete, "Alice paid for one expense")
         assertEquals(1, impact.expensesToUpdate, "Alice participates in one other expense")
     }
@@ -65,33 +65,33 @@ class MemberRemovalTest {
     @Test
     fun cascade_removes_payer_expenses_and_cleans_participant_lists() {
         val group = buildGroup()
-        addEqualExpense(group, id = 100, payerId = 10, amountInput = "30", amongIds = listOf(10, 11, 12))
-        addEqualExpense(group, id = 200, payerId = 11, amountInput = "15", amongIds = listOf(10, 11))
-        addEqualExpense(group, id = 300, payerId = 12, amountInput = "9", amongIds = listOf(11, 12))
+        addEqualExpense(group, id = "e100", payerId = "m10", amountInput = "30", amongIds = listOf("m10", "m11", "m12"))
+        addEqualExpense(group, id = "e200", payerId = "m11", amountInput = "15", amongIds = listOf("m10", "m11"))
+        addEqualExpense(group, id = "e300", payerId = "m12", amountInput = "9", amongIds = listOf("m11", "m12"))
 
-        group.removeMemberCascade(memberId = 10)
+        group.removeMemberCascade(memberId = "m10")
 
         // Expense 100 (paid by Alice) is gone.
-        assertNull(group.expenses.firstOrNull { it.id == 100L })
+        assertNull(group.expenses.firstOrNull { it.id == "e100" })
         // Expense 200 (paid by Bob) stays but Alice is removed from participants.
-        val e200 = group.expenses.first { it.id == 200L }
-        assertEquals(listOf(11L), e200.participants.map { it.memberId })
+        val e200 = group.expenses.first { it.id == "e200" }
+        assertEquals(listOf("m11"), e200.participants.map { it.memberId })
         // Expense 300 (Alice not involved) is untouched.
-        val e300 = group.expenses.first { it.id == 300L }
-        assertEquals(listOf(11L, 12L), e300.participants.map { it.memberId })
+        val e300 = group.expenses.first { it.id == "e300" }
+        assertEquals(listOf("m11", "m12"), e300.participants.map { it.memberId })
         // Member list has been shrunk.
-        assertEquals(listOf(11L, 12L), group.members.map { it.id })
+        assertEquals(listOf("m11", "m12"), group.members.map { it.id })
     }
 
     @Test
     fun settlement_stays_coherent_after_cascade() {
         val group = buildGroup()
         // Bob pays $6 for Alice + Bob + Charlie → each owes $2. Net: Alice −2, Bob +4, Charlie −2.
-        addEqualExpense(group, id = 100, payerId = 11, amountInput = "6", amongIds = listOf(10, 11, 12))
+        addEqualExpense(group, id = "e100", payerId = "m11", amountInput = "6", amongIds = listOf("m10", "m11", "m12"))
         // Alice pays $9 for Alice + Bob + Charlie — this gets wiped when Alice is removed.
-        addEqualExpense(group, id = 200, payerId = 10, amountInput = "9", amongIds = listOf(10, 11, 12))
+        addEqualExpense(group, id = "e200", payerId = "m10", amountInput = "9", amongIds = listOf("m10", "m11", "m12"))
 
-        group.removeMemberCascade(memberId = 10)
+        group.removeMemberCascade(memberId = "m10")
 
         val settlement = computeSettlement(group.toDomain())
         val byName = settlement.balances.associate { it.name to it.netCents }
@@ -108,11 +108,11 @@ class MemberRemovalTest {
     @Test
     fun cascade_on_uninvolved_member_is_a_plain_remove() {
         val group = buildGroup()
-        addEqualExpense(group, id = 100, payerId = 10, amountInput = "6", amongIds = listOf(10, 11))
+        addEqualExpense(group, id = "e100", payerId = "m10", amountInput = "6", amongIds = listOf("m10", "m11"))
 
-        group.removeMemberCascade(memberId = 12)
+        group.removeMemberCascade(memberId = "m12")
 
         assertEquals(1, group.expenses.size)
-        assertEquals(listOf(10L, 11L), group.members.map { it.id })
+        assertEquals(listOf("m10", "m11"), group.members.map { it.id })
     }
 }

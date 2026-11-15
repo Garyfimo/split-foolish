@@ -12,6 +12,10 @@ kotlin {
 }
 dependencies {
     implementation(project(":shared"))
+    // MainActivity constructs the SQLDelight database directly (it's the only place with a
+    // Context) so it imports from :data. :shared also depends on :data, but Gradle doesn't
+    // propagate `implementation` deps transitively to app modules.
+    implementation(project(":data"))
 
     implementation(libs.androidx.activity.compose)
 

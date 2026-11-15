@@ -6,15 +6,15 @@ import com.garyfimo.splitfoolish.core.billsplit.splitBill
 
 /** Net position of one member: positive cents = the group owes them, negative = they owe the group. */
 data class MemberBalance(
-    val memberId: Long,
+    val memberId: String,
     val name: String,
     val netCents: Long,
 )
 
 data class Debt(
-    val fromMemberId: Long,
+    val fromMemberId: String,
     val fromName: String,
-    val toMemberId: Long,
+    val toMemberId: String,
     val toName: String,
     val cents: Long,
 )
@@ -31,7 +31,7 @@ data class Settlement(
  * whole summary.
  */
 fun computeSettlement(group: Group): Settlement {
-    val balances = LinkedHashMap<Long, Long>()
+    val balances = LinkedHashMap<String, Long>()
     for (member in group.members) balances[member.id] = 0L
 
     for (expense in group.expenses) {
@@ -69,7 +69,7 @@ fun computeSettlement(group: Group): Settlement {
  * debtor and transfer the smaller of the two amounts. Produces at most n − 1 debts for n members.
  */
 private fun simplifyDebts(balances: List<MemberBalance>): List<Debt> {
-    data class Mutable(val memberId: Long, val name: String, var cents: Long)
+    data class Mutable(val memberId: String, val name: String, var cents: Long)
 
     val debtors = balances
         .filter { it.netCents < 0 }

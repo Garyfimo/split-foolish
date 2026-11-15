@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.garyfimo.splitfoolish.core.nav.Screen
 import com.garyfimo.splitfoolish.core.ui.SplitFoolishTheme
 import com.garyfimo.splitfoolish.feature.friends.FriendsScreen
@@ -20,10 +18,13 @@ import com.garyfimo.splitfoolish.feature.groups.NewGroupScreen
  * right feature screen with the specific state/callbacks that screen needs. Feature screens are
  * "dumb" — they accept data + callbacks and never reach into [AppState] directly, which is what
  * lets each feature live in its own Gradle module without depending on this one.
+ *
+ * [state] is required (no default) because an AppState can't be constructed without a repository
+ * and a CoroutineScope, both of which the platform entry point must supply. Previews should use
+ * [AppState.forPreview] to get an in-memory stub.
  */
 @Composable
-@Preview
-fun App(state: AppState = remember { AppState() }) {
+fun App(state: AppState) {
     SplitFoolishTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
