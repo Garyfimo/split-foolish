@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.sqldelight)
+    // kotlinx.serialization: gitlive firestore uses @Serializable data classes as its typed
+    // encode/decode surface. Applying the plugin here generates the serializers for our DTOs.
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -14,7 +17,7 @@ kotlin {
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
         compilerOptions {
-            jvmTarget = JvmTarget.JVM_11
+            jvmTarget = JvmTarget.JVM_17
         }
         withHostTest { }
     }
@@ -23,6 +26,10 @@ kotlin {
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
             implementation(libs.kotlinx.coroutines.core)
+            // Firestore: primary store for shared data (groups, members, expenses). Friends
+            // stay in SQLDelight because they're per-user quick-pick cache, not shared.
+            implementation(libs.firebase.firestore)
+            implementation(libs.kotlinx.serialization.core)
         }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
@@ -47,4 +54,11 @@ sqldelight {
             packageName.set("com.garyfimo.splitfoolish.data.db")
         }
     }
+}
+
+// Firebase BoM so gitlive's firestore transitives (firebase-firestore-ktx etc.) resolve to a
+// tested compatibility set. Same pattern as :feature:auth — KMP's source-set DSL doesn't expose
+// platform(...) so we add it at the project level against the generated configuration.
+dependencies {
+    add("androidMainImplementation", platform(libs.firebase.bom))
 }

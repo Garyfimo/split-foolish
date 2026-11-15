@@ -10,4 +10,5 @@ plugins {
     // Pre-declared with `apply false` so its transitive plugin classpath is pinned once at root
     // (same gotcha pattern as sqldelight — avoids subproject classloader surprises).
     alias(libs.plugins.googleServices) apply false
+    alias(libs.plugins.kotlinSerialization) apply false
 }

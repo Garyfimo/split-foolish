@@ -16,10 +16,21 @@ class SettlementTest {
     private val bob = GroupMember("2", "Bob")
     private val charlie = GroupMember("3", "Charlie")
 
+    // Tests don't exercise createdByUid/memberUids — settlement only reads amounts and
+    // membership. Fill with sentinel values so the data-class constructors are satisfied.
+    private val testCreator = alice.id
+
     private fun group(
         members: List<GroupMember> = listOf(alice, bob, charlie),
         vararg expenses: Expense,
-    ) = Group(id = "g1", name = "Trip", members = members, expenses = expenses.toList())
+    ) = Group(
+        id = "g1",
+        name = "Trip",
+        createdByUid = testCreator,
+        members = members,
+        memberUids = members.map { it.id },
+        expenses = expenses.toList(),
+    )
 
     private fun equalExpense(
         id: String,
@@ -33,6 +44,7 @@ class SettlementTest {
         payerId = payer.id,
         splitMode = SplitMode.Equal,
         participants = among.map { ExpenseParticipant(it.id) },
+        createdByUid = testCreator,
     )
 
     @Test
@@ -147,6 +159,7 @@ class SettlementTest {
                 ExpenseParticipant(bob.id, 30.0),
                 ExpenseParticipant(charlie.id, 20.0),
             ),
+            createdByUid = testCreator,
         )
         val settlement = computeSettlement(group(expenses = arrayOf(expense)))
         val byName = settlement.balances.associate { it.name to it.netCents }
@@ -169,7 +182,14 @@ class SettlementTest {
             )
         }
         val settlement = computeSettlement(
-            Group(id = "g99", name = "Dinner", members = diners, expenses = expenses)
+            Group(
+                id = "g99",
+                name = "Dinner",
+                createdByUid = testCreator,
+                members = diners,
+                memberUids = diners.map { it.id },
+                expenses = expenses,
+            )
         )
         assertTrue(
             settlement.debts.size <= diners.size - 1,
