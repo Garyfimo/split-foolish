@@ -7,7 +7,8 @@ import kotlin.test.assertTrue
 
 class BillSplitterTest {
 
-    private fun p(id: Long, name: String = "P$id", pct: Double = 0.0) = Participant(id, name, pct)
+    private fun p(id: Long, name: String = "P$id", pct: Double = 0.0) =
+        Participant(id.toString(), name, pct)
 
     @Test
     fun equalSplit_exact_divides_cleanly() {

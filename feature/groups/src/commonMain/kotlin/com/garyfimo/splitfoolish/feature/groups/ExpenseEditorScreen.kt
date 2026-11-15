@@ -36,8 +36,8 @@ import com.garyfimo.splitfoolish.core.ui.BackIconButton
 @Composable
 fun ExpenseEditorScreen(
     group: EditableGroup,
-    expenseId: Long?,
-    nextId: () -> Long,
+    expenseId: String?,
+    nextId: () -> String,
     onDone: () -> Unit,
 ) {
     if (group.members.isEmpty()) {

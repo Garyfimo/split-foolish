@@ -43,10 +43,10 @@ import kotlin.math.abs
 fun GroupDetailScreen(
     group: EditableGroup,
     friends: List<EditableFriend>,
-    nextId: () -> Long,
+    nextId: () -> String,
     onBack: () -> Unit,
     onAddExpense: () -> Unit,
-    onEditExpense: (expenseId: Long) -> Unit,
+    onEditExpense: (expenseId: String) -> Unit,
 ) {
     var showAddMember by remember { mutableStateOf(false) }
     var memberPendingRemoval by remember { mutableStateOf<EditableMember?>(null) }

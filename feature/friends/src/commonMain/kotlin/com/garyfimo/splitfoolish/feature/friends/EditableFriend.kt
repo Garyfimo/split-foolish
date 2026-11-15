@@ -11,7 +11,7 @@ import androidx.compose.runtime.setValue
  * groups is Alice in?" without a lookup pass.
  */
 class EditableFriend(
-    val id: Long,
+    val id: String,
     name: String,
 ) {
     var name: String by mutableStateOf(name)

@@ -5,19 +5,24 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * Tests use short readable string ids (e.g. "1", "a") rather than real UUIDs. The settlement logic
+ * never inspects id structure; it only needs them to be stable equatable keys. Keeping the tests
+ * concise is worth more than production-shaped fixtures here.
+ */
 class SettlementTest {
 
-    private val alice = GroupMember(1, "Alice")
-    private val bob = GroupMember(2, "Bob")
-    private val charlie = GroupMember(3, "Charlie")
+    private val alice = GroupMember("1", "Alice")
+    private val bob = GroupMember("2", "Bob")
+    private val charlie = GroupMember("3", "Charlie")
 
     private fun group(
         members: List<GroupMember> = listOf(alice, bob, charlie),
         vararg expenses: Expense,
-    ) = Group(id = 1, name = "Trip", members = members, expenses = expenses.toList())
+    ) = Group(id = "g1", name = "Trip", members = members, expenses = expenses.toList())
 
     private fun equalExpense(
-        id: Long,
+        id: String,
         payer: GroupMember,
         amount: Long,
         among: List<GroupMember>,
@@ -41,7 +46,7 @@ class SettlementTest {
     fun one_person_pays_split_equally_produces_single_debt_per_other_person() {
         // Alice pays $9 for A+B+C → each owes $3. Alice net +$6, B −$3, C −$3.
         val settlement = computeSettlement(
-            group(expenses = arrayOf(equalExpense(1, alice, 900, listOf(alice, bob, charlie))))
+            group(expenses = arrayOf(equalExpense("1", alice, 900, listOf(alice, bob, charlie))))
         )
         val byName = settlement.balances.associate { it.name to it.netCents }
         assertEquals(600L, byName["Alice"])
@@ -60,9 +65,9 @@ class SettlementTest {
         val settlement = computeSettlement(
             group(
                 expenses = arrayOf(
-                    equalExpense(1, alice, 1000, listOf(alice, bob, charlie)),
-                    equalExpense(2, bob, 1000, listOf(alice, bob, charlie)),
-                    equalExpense(3, charlie, 1000, listOf(alice, bob, charlie)),
+                    equalExpense("1", alice, 1000, listOf(alice, bob, charlie)),
+                    equalExpense("2", bob, 1000, listOf(alice, bob, charlie)),
+                    equalExpense("3", charlie, 1000, listOf(alice, bob, charlie)),
                 )
             )
         )
@@ -78,7 +83,7 @@ class SettlementTest {
         // $10 equal split across 3 people → shares 334, 333, 333. Alice (payer, idx 0 in split order)
         // got +334 back on her share, so her net = 1000 − 334 = 666. Others each −333.
         val settlement = computeSettlement(
-            group(expenses = arrayOf(equalExpense(1, alice, 1000, listOf(alice, bob, charlie))))
+            group(expenses = arrayOf(equalExpense("1", alice, 1000, listOf(alice, bob, charlie))))
         )
         val total = settlement.balances.sumOf { it.netCents }
         assertEquals(0L, total, "balances must sum to zero regardless of rounding")
@@ -94,8 +99,8 @@ class SettlementTest {
         val settlement = computeSettlement(
             group(
                 expenses = arrayOf(
-                    equalExpense(1, alice, 900, listOf(alice, bob, charlie)),
-                    equalExpense(2, bob, 600, listOf(alice, bob, charlie)),
+                    equalExpense("1", alice, 900, listOf(alice, bob, charlie)),
+                    equalExpense("2", bob, 600, listOf(alice, bob, charlie)),
                 )
             )
         )
@@ -116,7 +121,7 @@ class SettlementTest {
     fun expense_with_subset_of_members_ignores_the_rest() {
         // Only Alice and Bob share dessert; Charlie isn't a participant.
         val settlement = computeSettlement(
-            group(expenses = arrayOf(equalExpense(1, alice, 600, listOf(alice, bob))))
+            group(expenses = arrayOf(equalExpense("1", alice, 600, listOf(alice, bob))))
         )
         val byName = settlement.balances.associate { it.name to it.netCents }
         assertEquals(300L, byName["Alice"])
@@ -132,7 +137,7 @@ class SettlementTest {
         // Alice pays $100, split 50/30/20 among A/B/C.
         // Shares: A 50, B 30, C 20. Alice net: +100 − 50 = +50. Bob −30, Charlie −20.
         val expense = Expense(
-            id = 1,
+            id = "1",
             title = "trip",
             amountCents = 10000,
             payerId = alice.id,
@@ -154,17 +159,17 @@ class SettlementTest {
     @Test
     fun debt_count_never_exceeds_members_minus_one() {
         // Greedy simplification guarantees ≤ n−1 debts even in messy scenarios.
-        val diners = (1L..5L).map { GroupMember(it, "P$it") }
+        val diners = (1..5).map { GroupMember(it.toString(), "P$it") }
         val expenses = diners.mapIndexed { idx, payer ->
             equalExpense(
-                id = idx.toLong() + 10,
+                id = (idx + 10).toString(),
                 payer = payer,
                 amount = (idx + 1) * 1234L,
                 among = diners,
             )
         }
         val settlement = computeSettlement(
-            Group(id = 99, name = "Dinner", members = diners, expenses = expenses)
+            Group(id = "g99", name = "Dinner", members = diners, expenses = expenses)
         )
         assertTrue(
             settlement.debts.size <= diners.size - 1,
@@ -176,8 +181,8 @@ class SettlementTest {
 
     @Test
     fun expense_with_invalid_payer_is_skipped() {
-        val ghostExpense = equalExpense(1, alice, 1000, listOf(alice, bob))
-            .copy(payerId = 999)
+        val ghostExpense = equalExpense("1", alice, 1000, listOf(alice, bob))
+            .copy(payerId = "999")
         val settlement = computeSettlement(group(expenses = arrayOf(ghostExpense)))
         assertTrue(settlement.balances.all { it.netCents == 0L })
         assertEquals(emptyList(), settlement.debts)

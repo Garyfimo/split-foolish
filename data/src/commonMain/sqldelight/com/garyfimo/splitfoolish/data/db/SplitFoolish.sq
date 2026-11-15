@@ -1,0 +1,123 @@
+-- SplitFoolish local persistence schema.
+--
+-- Every primary key is a client-generated UUID string (TEXT). That same id becomes the Firebase
+-- document / push key when cloud sync lands, so offline-created records already carry their
+-- permanent id and no translation layer is needed later.
+--
+-- Members' names are snapshot-copied from Friends at the moment the member is added; there's
+-- intentionally no FK linking members.name back to friends.id, matching the existing in-memory
+-- model where renaming a friend doesn't propagate into existing groups.
+
+CREATE TABLE friends (
+    id   TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE groups (
+    id   TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    -- position_in_app lets us persist the user's visible ordering without relying on insert order,
+    -- which SQLite doesn't guarantee across result sets.
+    position_in_app INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE members (
+    id              TEXT NOT NULL PRIMARY KEY,
+    group_id        TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    position_in_app INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX members_group_idx ON members(group_id);
+
+CREATE TABLE expenses (
+    id              TEXT NOT NULL PRIMARY KEY,
+    group_id        TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    amount_input    TEXT NOT NULL,
+    payer_id        TEXT NOT NULL,
+    -- Stored as the enum name ("Equal" / "Percentage") rather than an integer so a future schema
+    -- rename shows up as a readable mismatch instead of a silently-wrong int.
+    split_mode      TEXT NOT NULL,
+    position_in_app INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX expenses_group_idx ON expenses(group_id);
+
+CREATE TABLE expense_participants (
+    expense_id     TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    member_id      TEXT NOT NULL,
+    included       INTEGER NOT NULL,
+    percent_input  TEXT NOT NULL,
+    PRIMARY KEY (expense_id, member_id)
+);
+
+-- Full-dataset reads used by hydration on app start. One query per table keeps the Kotlin wrapper
+-- straightforward and lets each result page stay a tight list.
+
+selectAllFriends:
+SELECT id, name
+FROM friends
+ORDER BY name COLLATE NOCASE;
+
+selectAllGroups:
+SELECT id, name, position_in_app
+FROM groups
+ORDER BY position_in_app, name COLLATE NOCASE;
+
+selectAllMembers:
+SELECT id, group_id, name, position_in_app
+FROM members
+ORDER BY group_id, position_in_app;
+
+selectAllExpenses:
+SELECT id, group_id, title, amount_input, payer_id, split_mode, position_in_app
+FROM expenses
+ORDER BY group_id, position_in_app;
+
+selectAllExpenseParticipants:
+SELECT expense_id, member_id, included, percent_input
+FROM expense_participants
+ORDER BY expense_id;
+
+-- Writes. All upserts use INSERT OR REPLACE so the Kotlin side can call them uniformly for both
+-- new and existing rows without checking existence first.
+
+upsertFriend:
+INSERT OR REPLACE INTO friends(id, name) VALUES (?, ?);
+
+deleteFriend:
+DELETE FROM friends WHERE id = ?;
+
+upsertGroup:
+INSERT OR REPLACE INTO groups(id, name, position_in_app) VALUES (?, ?, ?);
+
+deleteGroup:
+DELETE FROM groups WHERE id = ?;
+
+upsertMember:
+INSERT OR REPLACE INTO members(id, group_id, name, position_in_app) VALUES (?, ?, ?, ?);
+
+deleteMembersForGroup:
+DELETE FROM members WHERE group_id = ?;
+
+upsertExpense:
+INSERT OR REPLACE INTO expenses(id, group_id, title, amount_input, payer_id, split_mode, position_in_app)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteExpensesForGroup:
+DELETE FROM expenses WHERE group_id = ?;
+
+upsertExpenseParticipant:
+INSERT OR REPLACE INTO expense_participants(expense_id, member_id, included, percent_input)
+VALUES (?, ?, ?, ?);
+
+deleteParticipantsForExpense:
+DELETE FROM expense_participants WHERE expense_id = ?;
+
+-- Wholesale wipes used by saveSnapshot so we can replace the entire persisted world atomically
+-- without having to compute a per-row diff.
+
+wipeFriends:
+DELETE FROM friends;
+
+wipeGroups:
+DELETE FROM groups;
