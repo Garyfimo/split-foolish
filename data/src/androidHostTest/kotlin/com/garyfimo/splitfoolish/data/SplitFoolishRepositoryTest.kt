@@ -10,14 +10,28 @@ import kotlin.test.assertEquals
  * Host-side tests for the repo. We use SQLDelight's JDBC driver with its in-memory URL so each
  * test gets a fresh database, and we manually call [SplitFoolishDb.Schema.create] because the
  * JDBC driver (unlike Android/Native) doesn't automatically run the schema on open.
+ *
+ * The `PRAGMA foreign_keys = ON` step is essential: sqlite-jdbc (like every other SQLite driver)
+ * defaults foreign-key enforcement OFF per connection, and without it the `ON DELETE CASCADE`
+ * declarations in `SplitFoolish.sq` are silently inert. The in-memory driver uses a single
+ * connection for its whole lifetime, so one PRAGMA before `Schema.create` covers everything —
+ * no per-connection callback needed here the way there is on Android and iOS.
  */
 class SplitFoolishRepositoryTest {
 
-    private fun newRepo(): SplitFoolishRepository {
+    /**
+     * Build a repo and keep a handle to the underlying db so tests that need to assert on raw
+     * child-table state (cascades, etc.) can bypass the loader and read the tables directly.
+     */
+    private fun newRepoWithDb(): Pair<SplitFoolishRepository, SplitFoolishDb> {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        driver.execute(null, "PRAGMA foreign_keys = ON", 0, null)
         SplitFoolishDb.Schema.create(driver)
-        return SplitFoolishRepository(SplitFoolishDb(driver))
+        val db = SplitFoolishDb(driver)
+        return SplitFoolishRepository(db) to db
     }
+
+    private fun newRepo(): SplitFoolishRepository = newRepoWithDb().first
 
     @Test
     fun empty_database_loads_as_empty_snapshot() = runTest {
@@ -89,7 +103,7 @@ class SplitFoolishRepositoryTest {
 
     @Test
     fun deleting_a_group_cascades_to_members_expenses_and_participants() = runTest {
-        val repo = newRepo()
+        val (repo, db) = newRepoWithDb()
         repo.saveSnapshot(
             AppSnapshot(
                 friends = emptyList(),
@@ -116,7 +130,26 @@ class SplitFoolishRepositoryTest {
         )
         // Save with no groups at all; the wipe + cascade should remove every descendant.
         repo.saveSnapshot(AppSnapshot(friends = emptyList(), groups = emptyList()))
+
+        // Load-level assertion catches "nothing visible" — but loadSnapshot groupBy's child rows
+        // by group_id and only emits groups that still exist in `selectAllGroups`, so orphans
+        // would be silently filtered out. The raw-table assertions below are what actually prove
+        // the cascade fired instead of leaving orphans in the database file.
         val loaded = repo.loadSnapshot()
         assertEquals(emptyList(), loaded.groups)
+
+        val queries = db.splitFoolishQueries
+        assertEquals(
+            0, queries.selectAllMembers().executeAsList().size,
+            "members rows must cascade-delete when their parent group is removed",
+        )
+        assertEquals(
+            0, queries.selectAllExpenses().executeAsList().size,
+            "expenses rows must cascade-delete when their parent group is removed",
+        )
+        assertEquals(
+            0, queries.selectAllExpenseParticipants().executeAsList().size,
+            "expense_participants rows must cascade-delete when their parent expense is removed",
+        )
     }
 }
