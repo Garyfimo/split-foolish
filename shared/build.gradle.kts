@@ -45,6 +45,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core"))
             implementation(project(":data"))
+            implementation(project(":feature:auth"))
             implementation(project(":feature:friends"))
             implementation(project(":feature:groups"))
             implementation(libs.compose.runtime)

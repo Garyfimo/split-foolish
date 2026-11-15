@@ -7,4 +7,7 @@ plugins {
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.sqldelight) apply false
+    // Pre-declared with `apply false` so its transitive plugin classpath is pinned once at root
+    // (same gotcha pattern as sqldelight — avoids subproject classloader surprises).
+    alias(libs.plugins.googleServices) apply false
 }

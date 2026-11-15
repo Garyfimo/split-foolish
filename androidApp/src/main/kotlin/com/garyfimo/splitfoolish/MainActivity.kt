@@ -4,13 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import com.garyfimo.splitfoolish.data.SplitFoolishRepository
 import com.garyfimo.splitfoolish.data.createSplitFoolishDb
+import com.garyfimo.splitfoolish.feature.auth.AuthState
+import com.garyfimo.splitfoolish.feature.auth.FirebaseAuthRepository
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,23 +18,31 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            // Context is pulled from LocalContext (resolves to this Activity) and passed through
-            // to AndroidSqliteDriver via createSplitFoolishDb. remember keeps the repo + state
-            // across recompositions; rememberCoroutineScope ties the AppState's hydrate + save-
-            // through work to this composition's lifecycle (torn down with the Activity).
+            // Firebase Android SDK auto-initialises from the merged manifest entries the
+            // `com.google.gms.google-services` Gradle plugin injects at build time — no explicit
+            // FirebaseApp.initializeApp(context) call needed here.
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
-            val state = remember {
-                val db = createSplitFoolishDb(context.applicationContext)
-                AppState(SplitFoolishRepository(db), scope)
+
+            // Auth state is constructed once per Activity. Its internal StateFlow stays live
+            // across sign-in/out cycles — we only swap the per-uid repository below.
+            val authState = remember {
+                AuthState(repository = FirebaseAuthRepository(), scope = scope)
             }
-            App(state)
+
+            // Factory that the shared layer calls when it knows which uid to scope data to.
+            // Capturing `context` here keeps Android's Context requirement out of commonMain.
+            val repositoryForUid: (String) -> SplitFoolishRepository = remember {
+                { uid ->
+                    val db = createSplitFoolishDb(
+                        context = context.applicationContext,
+                        name = "splitfoolish-$uid.db",
+                    )
+                    SplitFoolishRepository(db)
+                }
+            }
+
+            App(authState = authState, repositoryForUid = repositoryForUid)
         }
     }
-}
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App(remember { AppState.forPreview() })
 }

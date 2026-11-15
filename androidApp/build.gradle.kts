@@ -3,6 +3,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
+    // google-services parses androidApp/google-services.json at build time and injects the
+    // Firebase project config into resources. Without this plugin, FirebaseApp.initializeApp()
+    // returns null at runtime and every auth call throws.
+    alias(libs.plugins.googleServices)
 }
 
 kotlin {
@@ -16,6 +20,9 @@ dependencies {
     // Context) so it imports from :data. :shared also depends on :data, but Gradle doesn't
     // propagate `implementation` deps transitively to app modules.
     implementation(project(":data"))
+    // :feature:auth types (AuthState, FirebaseAuthRepository) are instantiated here for the
+    // same reason — top-level wiring belongs in the app module.
+    implementation(project(":feature:auth"))
 
     implementation(libs.androidx.activity.compose)
 

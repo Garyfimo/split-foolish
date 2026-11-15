@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1093069489631",
+    "project_id": "splitfoolish-77870",
+    "storage_bucket": "splitfoolish-77870.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1093069489631:android:4f918e2c7914ecb55cb06a",
+        "android_client_info": {
+          "package_name": "com.garyfimo.splitfoolish"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgpjbFOEHl4YmI0h-yjY1RiR16f0tD6vg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
