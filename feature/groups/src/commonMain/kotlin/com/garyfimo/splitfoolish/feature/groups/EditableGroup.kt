@@ -41,6 +41,52 @@ class EditableExpense(
     var splitMode: SplitMode by mutableStateOf(splitMode)
     val participants: SnapshotStateList<EditableExpenseParticipant> =
         mutableStateListOf<EditableExpenseParticipant>().apply { addAll(participants) }
+
+    /**
+     * Deep copy for the editor's draft-copy pattern. The ExpenseEditor works on a cloned expense
+     * so keystrokes don't propagate into [EditableGroup.expenses] (which would trigger the Firestore
+     * write-through); on Done the draft is merged into the real expense via [applyFrom], and on
+     * back/discard it's simply dropped. Each participant is deep-copied too so toggling inclusion
+     * on the draft doesn't mutate the original.
+     */
+    fun cloneDraft(): EditableExpense = EditableExpense(
+        id = id,
+        title = title,
+        amountInput = amountInput,
+        payerId = payerId,
+        splitMode = splitMode,
+        participants = participants.map {
+            EditableExpenseParticipant(
+                memberId = it.memberId,
+                included = it.included,
+                percentInput = it.percentInput,
+            )
+        },
+        createdByUid = createdByUid,
+    )
+
+    /**
+     * Merge [other]'s edited fields into this expense in place. Used by the editor on Done when
+     * editing an existing expense — mutates the already-attached instance so the write-through
+     * captures the final state. Participants are replaced wholesale; snapshotFlow's debounce
+     * collapses the intermediate states into one save.
+     */
+    fun applyFrom(other: EditableExpense) {
+        title = other.title
+        amountInput = other.amountInput
+        payerId = other.payerId
+        splitMode = other.splitMode
+        participants.clear()
+        other.participants.forEach {
+            participants.add(
+                EditableExpenseParticipant(
+                    memberId = it.memberId,
+                    included = it.included,
+                    percentInput = it.percentInput,
+                ),
+            )
+        }
+    }
 }
 
 /**

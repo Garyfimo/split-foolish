@@ -32,6 +32,19 @@ import com.garyfimo.splitfoolish.core.billsplit.SplitMode
 import com.garyfimo.splitfoolish.core.billsplit.currencySymbol
 import com.garyfimo.splitfoolish.core.ui.BackIconButton
 
+/**
+ * Expense editor. Works on a **draft copy** of the expense that isn't attached to [group.expenses]
+ * until the user hits Done — that's what keeps a discarded new expense out of Firestore. Entering
+ * with a null id starts a fresh draft; entering with an id clones the existing expense so the
+ * original stays unchanged until Done confirms the edit.
+ *
+ * The write-through in [AppState] observes [group.expenses] via snapshotFlow; since the draft
+ * lives outside that list during editing, keystrokes never trigger a Firestore save. On Done, the
+ * draft is either appended (new) or merge-written into the real expense in place (edit). On
+ * Discard / back, the draft is simply dropped and nothing goes to Firestore. The Delete button
+ * (edit mode only) routes through [onDeleteExpense], which fires the explicit Firestore delete —
+ * SyncedRepository.saveSnapshot is upsert-only and would otherwise orphan the deleted doc.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseEditorScreen(
@@ -40,19 +53,19 @@ fun ExpenseEditorScreen(
     nextId: () -> String,
     currentUserUid: String,
     onDone: () -> Unit,
+    onDeleteExpense: (EditableExpense) -> Unit,
 ) {
     if (group.members.isEmpty()) {
         onDone()
         return
     }
 
-    // Editor works directly on the live EditableExpense in the group. Entering with a null id
-    // creates a draft immediately; "Discard" removes it on the way out so cancellation is clean.
-    val expense = remember(expenseId) {
-        if (expenseId != null) {
-            group.expenses.firstOrNull { it.id == expenseId }
-        } else {
-            val draft = EditableExpense(
+    // Draft state. For a new expense it's a blank EditableExpense never attached to the group
+    // until Done. For an edit it's a clone of the real expense; the real one stays untouched
+    // until Done merges the draft into it via applyFrom.
+    val draft = remember(expenseId) {
+        if (expenseId == null) {
+            EditableExpense(
                 id = nextId(),
                 title = "",
                 amountInput = "",
@@ -65,12 +78,12 @@ fun ExpenseEditorScreen(
                 // to delete it later (see Expense.createdByUid + the firestore.rules file).
                 createdByUid = currentUserUid,
             )
-            group.expenses.add(draft)
-            draft
+        } else {
+            group.expenses.firstOrNull { it.id == expenseId }?.cloneDraft()
         }
     }
 
-    if (expense == null) {
+    if (draft == null) {
         onDone()
         return
     }
@@ -79,6 +92,9 @@ fun ExpenseEditorScreen(
         topBar = {
             TopAppBar(
                 title = { Text(if (expenseId == null) "New expense" else "Edit expense") },
+                // Back = discard. For a new expense nothing was ever attached, so there's nothing
+                // to clean up. For an edit, the original expense was never mutated, so there's
+                // nothing to revert. Either way: drop the draft and return.
                 navigationIcon = { BackIconButton(onClick = onDone) },
             )
         },
@@ -92,16 +108,16 @@ fun ExpenseEditorScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(
-                value = expense.title,
-                onValueChange = { expense.title = it },
+                value = draft.title,
+                onValueChange = { draft.title = it },
                 label = { Text("Title (e.g. Dinner, Gas)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
 
             OutlinedTextField(
-                value = expense.amountInput,
-                onValueChange = { expense.amountInput = it },
+                value = draft.amountInput,
+                onValueChange = { draft.amountInput = it },
                 label = { Text("Amount") },
                 prefix = { Text(currencySymbol()) },
                 singleLine = true,
@@ -109,19 +125,44 @@ fun ExpenseEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            PayerSelector(group, expense)
-            SplitModeToggle(expense)
-            ParticipantsEditor(group, expense)
+            PayerSelector(group, draft)
+            SplitModeToggle(draft)
+            ParticipantsEditor(group, draft)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = onDone,
+                    onClick = {
+                        // Commit the draft to group.expenses. For a new expense: append. For an
+                        // edit: find the real expense by id and merge the draft's fields in place.
+                        // Either path mutates the SnapshotStateList the write-through observes, so
+                        // the next debounced save pushes exactly the final committed state to
+                        // Firestore — no intermediate keystroke emissions, no orphan documents.
+                        if (expenseId == null) {
+                            group.expenses.add(draft)
+                        } else {
+                            group.expenses.firstOrNull { it.id == expenseId }?.applyFrom(draft)
+                        }
+                        onDone()
+                    },
                     modifier = Modifier.weight(1f),
                 ) { Text("Done") }
                 OutlinedButton(
                     onClick = {
-                        group.expenses.removeAll { it.id == expense.id }
-                        onDone()
+                        if (expenseId == null) {
+                            // New expense discard: nothing was ever attached to the group, so
+                            // just return without touching anything. Specifically: do NOT call
+                            // group.expenses.removeAll — in the old code that was a no-op on
+                            // Compose (the draft was in the list) AND left the Firestore doc
+                            // behind since saveSnapshot is upsert-only.
+                            onDone()
+                        } else {
+                            // Edit-mode Delete: route through AppState which fires the explicit
+                            // Firestore delete. Pass the REAL expense (not the draft) since that's
+                            // the one actually attached and the one AppState.deleteExpense expects.
+                            val real = group.expenses.firstOrNull { it.id == expenseId }
+                            if (real != null) onDeleteExpense(real)
+                            onDone()
+                        }
                     },
                     modifier = Modifier.weight(1f),
                 ) { Text(if (expenseId == null) "Discard" else "Delete") }
