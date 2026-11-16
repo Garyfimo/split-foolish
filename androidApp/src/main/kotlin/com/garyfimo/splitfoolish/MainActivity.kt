@@ -39,7 +39,10 @@ class MainActivity : ComponentActivity() {
                   appScope: kotlinx.coroutines.CoroutineScope ->
                     val db = createSplitFoolishDb(
                         context = context.applicationContext,
-                        name = "splitfoolish-${user.uid}.db",
+                        // v2: friends table added uid + icon_id columns in the profile-and-
+                        // username PR. Bumped file name instead of a .sqm migration (see the
+                        // iOS entry point for the same rationale).
+                        name = "splitfoolish-v2-${user.uid}.db",
                     )
                     val friendsRepo = SplitFoolishRepository(db)
                     val groupsRepo = FirestoreGroupRepository()

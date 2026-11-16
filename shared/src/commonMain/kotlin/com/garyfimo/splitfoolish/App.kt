@@ -85,12 +85,28 @@ private fun AuthenticatedApp(
             onOpenGroup = { groupId -> state.screen = Screen.GroupDetail(groupId) },
             onDeleteGroup = { groupId -> state.deleteGroup(groupId) },
             onNewGroup = { state.screen = Screen.NewGroup },
+            onOpenSettings = { state.screen = Screen.Settings },
+        )
+
+        Screen.Settings -> SettingsScreen(
+            state = SettingsUiState(
+                profile = state.profile,
+                draftUsername = state.draftUsername,
+                draftIconId = state.draftIconId,
+                saving = state.settingsSaving,
+                message = state.settingsMessage,
+            ),
+            onUsernameChange = { state.updateDraftUsername(it) },
+            onPickIcon = { state.updateDraftIcon(it) },
+            onSave = { state.saveSettings() },
+            onClearMessage = { state.clearSettingsMessage() },
             onSignOut = { scope.launch { authState.signOut() } },
+            onBack = { state.screen = Screen.GroupsList },
         )
 
         Screen.Friends -> FriendsScreen(
             friends = state.friends,
-            onAddFriend = { name -> state.addFriend(name) },
+            onAddFriendByUsername = { username -> state.addFriendByUsername(username) },
             onRemoveFriend = { id -> state.removeFriend(id) },
             onBack = { state.screen = Screen.GroupsList },
         )

@@ -11,6 +11,7 @@ sealed class Screen {
     data object GroupsList : Screen()
     data object Friends : Screen()
     data object NewGroup : Screen()
+    data object Settings : Screen()
     data class GroupDetail(val groupId: String) : Screen()
     data class ExpenseEditor(val groupId: String, val expenseId: String?) : Screen()
 }

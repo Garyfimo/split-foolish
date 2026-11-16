@@ -16,7 +16,9 @@ import com.garyfimo.splitfoolish.data.PersistedGroup
 import com.garyfimo.splitfoolish.data.PersistedMember
 import com.garyfimo.splitfoolish.data.RegisteredUser
 import com.garyfimo.splitfoolish.data.SyncedRepository
+import com.garyfimo.splitfoolish.data.UserProfile
 import com.garyfimo.splitfoolish.data.UserRegistry
+import com.garyfimo.splitfoolish.data.UsernameClaimResult
 import com.garyfimo.splitfoolish.feature.friends.EditableFriend
 import com.garyfimo.splitfoolish.feature.groups.EditableExpense
 import com.garyfimo.splitfoolish.feature.groups.EditableExpenseParticipant
@@ -55,11 +57,46 @@ class AppState(
     val groups: SnapshotStateList<EditableGroup> = mutableStateListOf()
     val friends: SnapshotStateList<EditableFriend> = mutableStateListOf()
 
+    /** Live profile for the signed-in user, hydrated from `UserRegistry.observeProfile`. Null
+     *  until the first Firestore emission arrives. Settings screen reads this to pre-fill fields. */
+    var profile: UserProfile? by mutableStateOf(null)
+        private set
+
+    /** Draft fields the Settings screen is editing but hasn't yet saved. Separate from [profile]
+     *  so a remote update doesn't clobber an in-progress edit, and so the Save button has a clear
+     *  "has changes" signal. */
+    var draftUsername: String by mutableStateOf("")
+    var draftIconId: String? by mutableStateOf(null)
+        private set
+
+    /** Transient flags for the Settings screen's spinner + inline message. */
+    var settingsSaving: Boolean by mutableStateOf(false)
+        private set
+    var settingsMessage: String? by mutableStateOf(null)
+        private set
+
     /** Latest snapshot this instance has either received from or sent to [repo]. Used to break
      *  the write-after-read loop: a captured local snapshot that equals this is a no-op write. */
     private var lastSyncedSnapshot: AppSnapshot? = null
 
     init {
+        scope.launch {
+            // Mirror the live /users/{uid} document into [profile] so Settings is always showing
+            // what's actually in Firestore. Same runCatching rationale as the two collectors
+            // below — a permissions/network error must not reach propagateExceptionFinalResort.
+            runCatching {
+                userRegistry.observeProfile(currentUserUid).collect { fresh ->
+                    profile = fresh
+                    // Seed the drafts the first time the profile arrives (and when nothing has
+                    // been typed yet). Don't clobber in-progress edits on subsequent emissions —
+                    // the user is mid-type and the screen's Save button is what reconciles.
+                    if (fresh != null && draftUsername.isBlank() && draftIconId == null) {
+                        draftUsername = fresh.username.orEmpty()
+                        draftIconId = fresh.iconId
+                    }
+                }
+            }
+        }
         scope.launch {
             // Collect live Firestore updates. First emission hydrates the UI; subsequent
             // emissions are remote changes (another device added an expense, member joined, etc.).
@@ -96,7 +133,11 @@ class AppState(
         // Replace friends list (local source of truth is this device's SQLite — remote friends
         // should always equal local friends; this is just a defensive refresh).
         friends.clear()
-        snapshot.friends.forEach { friends.add(EditableFriend(it.id, it.name)) }
+        snapshot.friends.forEach {
+            friends.add(
+                EditableFriend(id = it.id, uid = it.uid, name = it.name, iconId = it.iconId),
+            )
+        }
 
         // Replace groups list wholesale. Any in-flight local edits to a currently-displayed
         // group will be lost on remote update — MVP cost; a per-field reconciliation layer
@@ -107,10 +148,35 @@ class AppState(
         lastSyncedSnapshot = snapshot
     }
 
-    fun addFriend(name: String): EditableFriend {
-        val friend = EditableFriend(nextId(), name)
-        friends.add(friend)
-        return friend
+    /**
+     * Resolve a username to a SplitFoolish user and add them to the local friends list. Returns
+     * null on success, a user-visible error string otherwise. Same return-shape as
+     * [addMemberByEmail] — keeps the dialogs symmetric and avoids leaking a sealed Result type
+     * into :feature:friends. Firestore exceptions are caught here so the UI's scope.launch stays
+     * safe on K/N (see PR #10 post-review notes).
+     */
+    suspend fun addFriendByUsername(username: String): String? {
+        val lookup: RegisteredUser = try {
+            userRegistry.lookupByUsername(username)
+        } catch (t: Throwable) {
+            return "Couldn't reach the user directory: ${t.message ?: t::class.simpleName ?: "unknown error"}"
+        } ?: return "No SplitFoolish account with that username."
+
+        if (lookup.uid == currentUserUid) return "That's you."
+        if (friends.any { it.uid == lookup.uid }) return "Already in your friends."
+
+        val displayName = lookup.displayName?.takeIf { it.isNotBlank() }
+            ?: lookup.username
+            ?: lookup.email
+        friends.add(
+            EditableFriend(
+                id = nextId(),
+                uid = lookup.uid,
+                name = displayName,
+                iconId = lookup.iconId,
+            ),
+        )
+        return null
     }
 
     fun removeFriend(id: String) {
@@ -187,6 +253,88 @@ class AppState(
         return null
     }
 
+    // ----- Settings screen ------------------------------------------------------------------
+
+    fun updateDraftUsername(value: String) {
+        draftUsername = value
+    }
+
+    fun updateDraftIcon(iconId: String) {
+        draftIconId = iconId
+    }
+
+    fun clearSettingsMessage() {
+        settingsMessage = null
+    }
+
+    /**
+     * Persist Settings-screen edits. Two possibly-independent writes:
+     *   1. If the username draft differs from what's saved, run the transactional claim. The
+     *      result enum tells us which inline message to show.
+     *   2. If the icon draft differs, merge-write the iconId.
+     *
+     * Both operations are wrapped in try/catch — a failure in one shouldn't leave the UI
+     * believing the other succeeded, so each sets its own piece of [settingsMessage].
+     */
+    suspend fun saveSettings() {
+        val snapshot = profile
+        settingsSaving = true
+        settingsMessage = null
+        try {
+            val normalisedUsername = draftUsername.trim().lowercase()
+            val currentUsername = snapshot?.username.orEmpty()
+            val usernameChanged = normalisedUsername.isNotBlank() &&
+                normalisedUsername != currentUsername
+
+            val usernameResult: UsernameClaimResult? = if (usernameChanged) {
+                try {
+                    userRegistry.claimUsername(currentUserUid, normalisedUsername)
+                } catch (t: Throwable) {
+                    settingsMessage = "Couldn't claim username: ${t.message ?: t::class.simpleName}"
+                    return
+                }
+            } else null
+
+            // If the username claim failed, don't go on to write the icon — the user needs to
+            // fix the username first, and a partial save would be confusing.
+            if (usernameResult != null && usernameResult != UsernameClaimResult.Ok &&
+                usernameResult != UsernameClaimResult.Unchanged) {
+                // The guard above means only Taken / Invalid / NetworkError get here; the when
+                // matches all three with no else branch, so the compiler also catches any future
+                // enum value we might add without a corresponding message.
+                settingsMessage = when (usernameResult) {
+                    UsernameClaimResult.Taken -> "That username is already taken."
+                    UsernameClaimResult.Invalid ->
+                        "Username must be 3–20 chars, start with a letter, " +
+                            "then letters/digits/underscore."
+                    UsernameClaimResult.NetworkError ->
+                        "Couldn't reach the server. Check your connection and try again."
+                    UsernameClaimResult.Ok, UsernameClaimResult.Unchanged -> null
+                }
+                return
+            }
+
+            val iconChanged = draftIconId != null && draftIconId != snapshot?.iconId
+            if (iconChanged) {
+                try {
+                    userRegistry.setIcon(currentUserUid, draftIconId!!)
+                } catch (t: Throwable) {
+                    settingsMessage = "Couldn't save icon: ${t.message ?: t::class.simpleName}"
+                    return
+                }
+            }
+
+            settingsMessage = when {
+                usernameChanged && iconChanged -> "Profile saved."
+                usernameChanged -> "Username saved."
+                iconChanged -> "Icon saved."
+                else -> "Nothing to save."
+            }
+        } finally {
+            settingsSaving = false
+        }
+    }
+
     private fun PersistedGroup.toEditable(): EditableGroup {
         // createdByUid now flows end-to-end from Firestore → CloudGroup → PersistedGroup, so we
         // use the real creator uid here. Fall back to the current user only for the legacy
@@ -225,7 +373,9 @@ class AppState(
     }
 
     private fun captureSnapshot(): AppSnapshot = AppSnapshot(
-        friends = friends.map { PersistedFriend(it.id, it.name) },
+        friends = friends.map {
+            PersistedFriend(id = it.id, name = it.name, uid = it.uid, iconId = it.iconId)
+        },
         groups = groups.map { it.toPersisted() },
     )
 

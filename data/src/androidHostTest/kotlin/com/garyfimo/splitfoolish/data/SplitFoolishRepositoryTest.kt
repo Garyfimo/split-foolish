@@ -45,8 +45,11 @@ class SplitFoolishRepositoryTest {
         val repo = newRepo()
         val input = AppSnapshot(
             friends = listOf(
-                PersistedFriend(id = "f1", name = "Alice"),
-                PersistedFriend(id = "f2", name = "Bob"),
+                // uid empty + iconId null matches the "legacy / newly-linked" shape SQLite
+                // round-trips through. A friend linked to a real user has uid populated; the
+                // test here just exercises the schema plumbing, not the Firestore side.
+                PersistedFriend(id = "f1", name = "Alice", uid = "", iconId = null),
+                PersistedFriend(id = "f2", name = "Bob", uid = "", iconId = null),
             ),
             groups = listOf(
                 PersistedGroup(
@@ -89,13 +92,13 @@ class SplitFoolishRepositoryTest {
         val repo = newRepo()
         repo.saveSnapshot(
             AppSnapshot(
-                friends = listOf(PersistedFriend("old", "Ghost")),
+                friends = listOf(PersistedFriend("old", "Ghost", uid = "", iconId = null)),
                 groups = emptyList(),
             )
         )
         repo.saveSnapshot(
             AppSnapshot(
-                friends = listOf(PersistedFriend("new", "Alive")),
+                friends = listOf(PersistedFriend("new", "Alive", uid = "", iconId = null)),
                 groups = emptyList(),
             )
         )

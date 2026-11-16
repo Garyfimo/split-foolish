@@ -14,6 +14,13 @@ data class AppSnapshot(
 data class PersistedFriend(
     val id: String,
     val name: String,
+    // Firebase auth uid of the linked user — empty for legacy typed-name entries. Carried through
+    // so the groups Add-member-by-username flow can pre-fill from the friends quick-pick without
+    // a round-trip to Firestore.
+    val uid: String,
+    // Profile icon id from the ProfileAvatar catalog. Null for legacy entries; the UI falls back
+    // to the initials bubble.
+    val iconId: String?,
 )
 
 data class PersistedGroup(
