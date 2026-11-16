@@ -20,9 +20,21 @@ class SyncedRepository(
     private val currentUserUid: String,
 ) {
     /**
-     * Combined live view: friends from local SQLite (one-shot — friends don't update live) plus
-     * groups from Firestore (reactive — re-emits whenever any group the user belongs to changes
-     * on any device). Emits whenever the Firestore side does.
+     * One-shot read of this user's local friends. Called once at AppState init to seed Compose
+     * state before the live group collector starts; after that friends are owned by Compose + the
+     * write-through, and remote emissions never refresh them (see [observeSnapshot]).
+     */
+    suspend fun loadFriendsOnce(): List<PersistedFriend> = friendsStore.loadSnapshot().friends
+
+    /**
+     * Live view of groups from Firestore. Re-emits whenever any group the user belongs to changes
+     * on any device.
+     *
+     * The emitted [AppSnapshot.friends] field is deliberately set from SQLite at emission time
+     * **but should not be used to refresh Compose state** — see PR #11 review for the race. It's
+     * included so [AppSnapshot] equality still reflects the full on-disk world (the write-through
+     * compares the captured Compose snapshot against the last-applied one; friends diverging
+     * between Compose and SQLite is a signal that a write is needed, not a bug to reconcile here).
      */
     fun observeSnapshot(): Flow<AppSnapshot> =
         groups.observeGroupsForUser(currentUserUid).map { cloudGroups ->

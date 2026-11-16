@@ -1,18 +1,18 @@
 package com.garyfimo.splitfoolish.feature.friends
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-
 /**
- * A friend lives in a global list, independent of any group. Picking a friend when adding a group
- * member copies the current name into a new group member; later edits on either side don't
- * propagate. Keeps removal simple — no cascade — at the cost of not being able to ask "which
- * groups is Alice in?" without a lookup pass.
+ * A friend lives in a global list, independent of any group. After the profile-and-username PR
+ * every friend is a *linked* reference to a real SplitFoolish account — the add-friend dialog
+ * resolves a username to a uid via the Firestore /usernames index. The displayed name is cached
+ * at resolution time; rename on the owning user's side doesn't propagate here until the next
+ * sign-in refresh.
+ *
+ * [uid] is the Firebase auth uid of the linked user. [iconId] is the profile icon id from the
+ * shared ProfileAvatar catalog — null falls back to the initials bubble.
  */
-class EditableFriend(
+data class EditableFriend(
     val id: String,
-    name: String,
-) {
-    var name: String by mutableStateOf(name)
-}
+    val uid: String,
+    val name: String,
+    val iconId: String?,
+)

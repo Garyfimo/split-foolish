@@ -10,10 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -35,8 +39,9 @@ fun GroupsListScreen(
     onDeleteGroup: (groupId: String) -> Unit,
     onNewGroup: () -> Unit,
     // Optional so the screen stays reusable in contexts without auth (tests, previews). When
-    // present, a "Sign out" action shows in the TopAppBar — the only sign-out affordance in the app.
-    onSignOut: (() -> Unit)? = null,
+    // present, a gear-icon action opens the Settings screen — which is where profile editing and
+    // sign-out live (previously a top-bar "Sign out" lived here directly).
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -46,8 +51,13 @@ fun GroupsListScreen(
                     TextButton(onClick = onOpenFriends) {
                         Text(if (friendCount == 0) "Friends" else "Friends ($friendCount)")
                     }
-                    if (onSignOut != null) {
-                        TextButton(onClick = onSignOut) { Text("Sign out") }
+                    if (onOpenSettings != null) {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Settings",
+                            )
+                        }
                     }
                 },
             )

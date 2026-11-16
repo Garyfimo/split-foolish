@@ -28,7 +28,12 @@ internal class SqlSplitFoolishRepository(
         val queries = db.splitFoolishQueries
 
         val friends = queries.selectAllFriends().executeAsList().map { row ->
-            PersistedFriend(id = row.id, name = row.name)
+            PersistedFriend(
+                id = row.id,
+                name = row.name,
+                uid = row.uid,
+                iconId = row.icon_id,
+            )
         }
 
         // Pre-group members and expenses by group_id once so the per-group assembly below is linear
@@ -92,7 +97,12 @@ internal class SqlSplitFoolishRepository(
             queries.wipeFriends()
 
             snapshot.friends.forEach { friend ->
-                queries.upsertFriend(id = friend.id, name = friend.name)
+                queries.upsertFriend(
+                    id = friend.id,
+                    name = friend.name,
+                    uid = friend.uid,
+                    icon_id = friend.iconId,
+                )
             }
 
             snapshot.groups.forEachIndexed { groupIndex, group ->

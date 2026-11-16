@@ -24,7 +24,11 @@ fun MainViewController() = ComposeUIViewController {
 
     val appStateFactory = remember {
         { user: AuthUser, appScope: CoroutineScope ->
-            val db = createSplitFoolishDb(name = "splitfoolish-${user.uid}.db")
+            // v2 file name: the friends table gained uid + icon_id columns in the profile-and-
+            // username PR. Rather than wire a .sqm migration for a user-count of ~2 testers, we
+            // bump the file name — any legacy v1 file on disk is orphaned, and new installs/
+            // signed-in uids get a fresh schema.
+            val db = createSplitFoolishDb(name = "splitfoolish-v2-${user.uid}.db")
             val friendsRepo = SplitFoolishRepository(db)
             val groupsRepo = FirestoreGroupRepository()
             val synced = SyncedRepository(friendsRepo, groupsRepo, user.uid)

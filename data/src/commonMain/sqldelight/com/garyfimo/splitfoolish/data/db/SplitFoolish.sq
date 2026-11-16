@@ -9,8 +9,15 @@
 -- model where renaming a friend doesn't propagate into existing groups.
 
 CREATE TABLE friends (
-    id   TEXT NOT NULL PRIMARY KEY,
-    name TEXT NOT NULL
+    id      TEXT NOT NULL PRIMARY KEY,
+    name    TEXT NOT NULL,
+    -- Firebase auth uid of the linked user, if this friend is a real SplitFoolish account found
+    -- via the /usernames index. Empty string for legacy typed-name friends (none exist in the
+    -- v2 DB file but the default keeps the schema permissive).
+    uid     TEXT NOT NULL DEFAULT '',
+    -- Profile icon id from the ProfileAvatar catalog in :core:ui. Cached here so the friends
+    -- list can render avatars offline; refreshed on each sign-in's directory fetch.
+    icon_id TEXT
 );
 
 CREATE TABLE groups (
@@ -54,7 +61,7 @@ CREATE TABLE expense_participants (
 -- straightforward and lets each result page stay a tight list.
 
 selectAllFriends:
-SELECT id, name
+SELECT id, name, uid, icon_id
 FROM friends
 ORDER BY name COLLATE NOCASE;
 
@@ -82,7 +89,7 @@ ORDER BY expense_id;
 -- new and existing rows without checking existence first.
 
 upsertFriend:
-INSERT OR REPLACE INTO friends(id, name) VALUES (?, ?);
+INSERT OR REPLACE INTO friends(id, name, uid, icon_id) VALUES (?, ?, ?, ?);
 
 deleteFriend:
 DELETE FROM friends WHERE id = ?;

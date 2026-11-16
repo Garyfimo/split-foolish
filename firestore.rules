@@ -7,8 +7,13 @@ rules_version = '2';
 // can't bypass them (defence in depth).
 //
 // Model recap:
-//   /users/{uid}               — canonical user record (own-user read+write).
+//   /users/{uid}               — canonical user record (own-user read+write). Carries email,
+//                                optional displayName, optional username, and iconId (profile
+//                                avatar selection from the client-side catalog).
 //   /users_by_email/{email}    — reverse index so other users can find you by email.
+//   /usernames/{username}      — claim-once reverse index for the unique-username feature. Keyed
+//                                by lowercased username. Pointer doc holds { uid }. Created
+//                                inside a transaction so two simultaneous claimers can't both win.
 //   /groups/{groupId}          — multi-member group; members[] lists uid+name, memberUids[] is
 //                                the flat uid list used for array-contains queries.
 //   /groups/{groupId}/expenses/{expenseId}
@@ -47,6 +52,28 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.auth.token.email != null
         && emailKey == request.auth.token.email.lower();
+    }
+
+    // Username reverse index. Any signed-in user can get by exact key (that's how "add friend by
+    // username" resolves a handle to a uid), but list is NOT granted so nobody can dump the whole
+    // username catalog. Writes split into create + delete rather than a single `allow write`:
+    //   • create is the claim path — the caller must point the new entry at their own uid, and
+    //     Firestore's create semantics mean this only succeeds when the doc doesn't yet exist,
+    //     which is exactly the atomicity guarantee a username claim needs when run inside a
+    //     transaction. Two clients racing to claim the same username: whichever transaction
+    //     commits second sees a non-null pre-image on the retry and the client aborts.
+    //   • delete is the release path — used by the rename flow to free an old username before
+    //     claiming a new one. Restricted to the pointer's current owner so nobody else can free
+    //     your username out from under you.
+    //   • update is intentionally omitted — a username can't be re-pointed in place; renaming is
+    //     always "delete old pointer + create new pointer + update /users/{uid}.username" under
+    //     one transaction. Omitting `allow update` makes any attempt to overwrite in place fail.
+    match /usernames/{usernameKey} {
+      allow get: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
     // Groups: only accessible to members. On create we additionally require the caller to be
