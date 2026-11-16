@@ -154,6 +154,7 @@ private fun AuthenticatedApp(
                     nextId = { state.nextId() },
                     currentUserUid = user.uid,
                     onDone = { state.screen = Screen.GroupDetail(group.id) },
+                    onDeleteExpense = { expense -> state.deleteExpense(group, expense) },
                 )
             }
         }
