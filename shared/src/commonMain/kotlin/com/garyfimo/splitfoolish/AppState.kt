@@ -98,13 +98,26 @@ class AppState(
             }
         }
         scope.launch {
-            // Collect live Firestore updates. First emission hydrates the UI; subsequent
-            // emissions are remote changes (another device added an expense, member joined, etc.).
-            // Wrapped in runCatching because Firestore emits a terminal error into the flow if
-            // permissions are rejected or the network stays down — on K/N that otherwise reaches
-            // propagateExceptionFinalResort and tears down the composition. Swallowing here keeps
-            // the app alive on cached data until the next successful connection.
+            // Two phases, both guarded by a single runCatching because any throw at either step
+            // must land here rather than propagateExceptionFinalResort (see PR #10 post-review
+            // notes on K/N's non-supervisor Job in rememberCoroutineScope).
             runCatching {
+                // Phase 1: one-shot friends hydrate from SQLite. Happens BEFORE the live
+                // group collector starts because otherwise a Firestore emission arriving mid
+                // addFriendByUsername would pull stale (empty) friends out of SQLite and
+                // applyRemoteSnapshot would overwrite the in-flight add — which the debounced
+                // write-through then observes as "no change needed," permanently losing the
+                // friend. See PR #11 review comment on AppState line 135.
+                val initialFriends = repo.loadFriendsOnce()
+                friends.clear()
+                initialFriends.forEach {
+                    friends.add(
+                        EditableFriend(id = it.id, uid = it.uid, name = it.name, iconId = it.iconId),
+                    )
+                }
+
+                // Phase 2: live group updates from Firestore. Friends are intentionally NOT
+                // refreshed from these emissions — they're Compose-owned from here on.
                 repo.observeSnapshot().collect { snapshot ->
                     applyRemoteSnapshot(snapshot)
                 }
@@ -130,21 +143,23 @@ class AppState(
     }
 
     private fun applyRemoteSnapshot(snapshot: AppSnapshot) {
-        // Replace friends list (local source of truth is this device's SQLite — remote friends
-        // should always equal local friends; this is just a defensive refresh).
-        friends.clear()
-        snapshot.friends.forEach {
-            friends.add(
-                EditableFriend(id = it.id, uid = it.uid, name = it.name, iconId = it.iconId),
-            )
-        }
-
+        // Friends are hydrated ONCE at init (see Phase 1 above) and then owned by Compose state
+        // + the write-through. Deliberately left untouched here to close the race flagged by the
+        // PR #11 review: a Firestore group emission arriving mid addFriendByUsername reads SQLite
+        // before the write-through has persisted the new friend, and clearing+refilling from
+        // snapshot.friends would wipe the in-flight add. Steady-state consistency between Compose
+        // and SQLite is maintained by the write-through alone.
+        //
         // Replace groups list wholesale. Any in-flight local edits to a currently-displayed
         // group will be lost on remote update — MVP cost; a per-field reconciliation layer
         // would preserve them but adds a lot of complexity for occasional conflicts.
         groups.clear()
         snapshot.groups.forEach { groups.add(it.toEditable()) }
 
+        // lastSyncedSnapshot still records snapshot as-is (including its SQLite-sourced friends).
+        // That's correct: if Compose friends have diverged from SQLite friends (e.g. mid-add),
+        // the next captureSnapshot will produce a value that does not equal lastSyncedSnapshot,
+        // and the write-through will save — restoring consistency.
         lastSyncedSnapshot = snapshot
     }
 
