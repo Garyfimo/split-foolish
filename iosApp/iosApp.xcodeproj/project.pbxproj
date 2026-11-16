@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		7D616EF930AA555D00FCCAE5 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 7D616EF830AA555D00FCCAE5 /* FirebaseAuth */; };
 		7D616EFB30AA556300FCCAE5 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D616EFA30AA556300FCCAE5 /* FirebaseCore */; };
+		7D850E4030AAA10100F386F6 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D850E3F30AAA10100F386F6 /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 			files = (
 				7D616EFB30AA556300FCCAE5 /* FirebaseCore in Frameworks */,
 				7D616EF930AA555D00FCCAE5 /* FirebaseAuth in Frameworks */,
+				7D850E4030AAA10100F386F6 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +104,7 @@
 			packageProductDependencies = (
 				7D616EF830AA555D00FCCAE5 /* FirebaseAuth */,
 				7D616EFA30AA556300FCCAE5 /* FirebaseCore */,
+				7D850E3F30AAA10100F386F6 /* FirebaseFirestore */,
 			);
 			productName = iosApp;
 			productReference = AFE65E26F3E4F35BED527DF3 /* SplitFoolish.app */;
@@ -410,6 +413,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7D616EF630AA514A00FCCAE5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
+		};
+		7D850E3F30AAA10100F386F6 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D616EF630AA514A00FCCAE5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

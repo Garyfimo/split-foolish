@@ -376,9 +376,17 @@ private fun AddMemberByEmailDialog(
                     inFlight = true
                     errorMessage = null
                     scope.launch {
-                        val err = onLookup(email)
-                        inFlight = false
-                        if (err == null) onSuccess() else errorMessage = err
+                        // try/finally guarantees the spinner stops even if onLookup throws an
+                        // unexpected exception the suspend contract was supposed to have caught.
+                        // Without this the dialog would stay spinning forever on an escaped throw.
+                        try {
+                            val err = onLookup(email)
+                            if (err == null) onSuccess() else errorMessage = err
+                        } catch (t: Throwable) {
+                            errorMessage = "Something went wrong: ${t.message ?: t::class.simpleName}"
+                        } finally {
+                            inFlight = false
+                        }
                     }
                 },
             ) {

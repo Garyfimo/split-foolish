@@ -63,23 +63,30 @@ class AppState(
         scope.launch {
             // Collect live Firestore updates. First emission hydrates the UI; subsequent
             // emissions are remote changes (another device added an expense, member joined, etc.).
-            repo.observeSnapshot().collect { snapshot ->
-                applyRemoteSnapshot(snapshot)
+            // Wrapped in runCatching because Firestore emits a terminal error into the flow if
+            // permissions are rejected or the network stays down — on K/N that otherwise reaches
+            // propagateExceptionFinalResort and tears down the composition. Swallowing here keeps
+            // the app alive on cached data until the next successful connection.
+            runCatching {
+                repo.observeSnapshot().collect { snapshot ->
+                    applyRemoteSnapshot(snapshot)
+                }
             }
         }
         scope.launch {
             // Write-through: any local Compose state change → push to repo after settling.
             // drop(1) skips the empty initial state before any remote emission has arrived.
             // distinctUntilChanged + lastSyncedSnapshot check together break the Firestore
-            // read→apply→write→read loop.
+            // read→apply→write→read loop. Per-emission runCatching so a single failed write
+            // doesn't terminate the collector — the next local edit will retry on its own.
             snapshotFlow { captureSnapshot() }
                 .drop(1)
                 .debounce(500)
                 .distinctUntilChanged()
                 .collect { local ->
                     if (local != lastSyncedSnapshot) {
-                        repo.saveSnapshot(local)
-                        lastSyncedSnapshot = local
+                        val saved = runCatching { repo.saveSnapshot(local) }
+                        if (saved.isSuccess) lastSyncedSnapshot = local
                     }
                 }
         }
@@ -158,10 +165,20 @@ class AppState(
      * given group. Returns null on success; otherwise a short error message the UI renders
      * inline. Keeping this as a String return avoids leaking a result type into :feature:groups,
      * which doesn't depend on :shared or :data.
+     *
+     * The Firestore lookup can throw (PERMISSION_DENIED if rules haven't been deployed, the
+     * token.email guard rejects us, Firestore isn't enabled on the project, or the network is
+     * unreachable). We turn those into a user-visible string rather than letting them propagate
+     * — the caller invokes this inside a plain scope.launch on iOS, where an uncaught throw
+     * reaches K/N's propagateExceptionFinalResort and crashes the composition.
      */
     suspend fun addMemberByEmail(group: EditableGroup, email: String): String? {
-        val lookup: RegisteredUser = userRegistry.lookupByEmail(email)
-            ?: return "No SplitFoolish account with that email."
+        val lookup: RegisteredUser = try {
+            userRegistry.lookupByEmail(email)
+        } catch (t: Throwable) {
+            return "Couldn't reach the user directory: ${t.message ?: t::class.simpleName ?: "unknown error"}"
+        } ?: return "No SplitFoolish account with that email."
+
         if (group.members.any { it.id == lookup.uid }) {
             return "They're already in this group."
         }
