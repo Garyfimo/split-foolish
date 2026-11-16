@@ -129,6 +129,19 @@ fun ExpenseEditorScreen(
             SplitModeToggle(draft)
             ParticipantsEditor(group, draft)
 
+            // Delete is only offered to the expense's creator — Firestore's rule rejects anyone
+            // else's delete, and AppState.deleteExpense enforces the same check client-side with
+            // a silent return. Without this UI gate, a non-creator editing someone else's expense
+            // would see a "Delete" button, tap it, and get zero feedback (nav back + expense
+            // still there). Mirrors GroupDetailScreen's row-delete gate (canDelete).
+            val canDelete = expenseId != null && draft.createdByUid == currentUserUid
+            val secondaryLabel = when {
+                expenseId == null -> "Discard"
+                canDelete -> "Delete"
+                // Non-creator editing someone else's expense: back/this button both drop the
+                // draft without touching the original. "Discard" is the honest label.
+                else -> "Discard"
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
@@ -148,24 +161,20 @@ fun ExpenseEditorScreen(
                 ) { Text("Done") }
                 OutlinedButton(
                     onClick = {
-                        if (expenseId == null) {
-                            // New expense discard: nothing was ever attached to the group, so
-                            // just return without touching anything. Specifically: do NOT call
-                            // group.expenses.removeAll — in the old code that was a no-op on
-                            // Compose (the draft was in the list) AND left the Firestore doc
-                            // behind since saveSnapshot is upsert-only.
-                            onDone()
-                        } else {
-                            // Edit-mode Delete: route through AppState which fires the explicit
-                            // Firestore delete. Pass the REAL expense (not the draft) since that's
-                            // the one actually attached and the one AppState.deleteExpense expects.
+                        if (canDelete) {
+                            // Creator editing their own expense: real delete. Routes through
+                            // AppState which fires the explicit Firestore delete (saveSnapshot
+                            // is upsert-only so a Compose-only removal would orphan the cloud doc).
                             val real = group.expenses.firstOrNull { it.id == expenseId }
                             if (real != null) onDeleteExpense(real)
-                            onDone()
                         }
+                        // Discard paths (new expense + non-creator edit): nothing to clean up —
+                        // the draft was never attached to group.expenses and the real expense
+                        // (if any) was never mutated. Just navigate back.
+                        onDone()
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text(if (expenseId == null) "Discard" else "Delete") }
+                ) { Text(secondaryLabel) }
             }
         }
     }
