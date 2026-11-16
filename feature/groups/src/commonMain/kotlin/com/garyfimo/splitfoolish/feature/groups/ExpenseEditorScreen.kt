@@ -38,6 +38,7 @@ fun ExpenseEditorScreen(
     group: EditableGroup,
     expenseId: String?,
     nextId: () -> String,
+    currentUserUid: String,
     onDone: () -> Unit,
 ) {
     if (group.members.isEmpty()) {
@@ -60,6 +61,9 @@ fun ExpenseEditorScreen(
                 participants = group.members.map {
                     EditableExpenseParticipant(it.id, included = true, percentInput = "")
                 },
+                // Creator is whoever opens the editor for a new expense — only they will be able
+                // to delete it later (see Expense.createdByUid + the firestore.rules file).
+                createdByUid = currentUserUid,
             )
             group.expenses.add(draft)
             draft

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -11,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.garyfimo.splitfoolish.core.nav.Screen
 import com.garyfimo.splitfoolish.core.ui.SplitFoolishTheme
-import com.garyfimo.splitfoolish.data.SplitFoolishRepository
+import com.garyfimo.splitfoolish.data.UserRegistry
 import com.garyfimo.splitfoolish.feature.auth.AuthState
 import com.garyfimo.splitfoolish.feature.auth.AuthUser
 import com.garyfimo.splitfoolish.feature.auth.LoginScreen
@@ -26,14 +27,16 @@ import kotlinx.coroutines.launch
  * Root composable. Branches on [AuthState]: null user → [LoginScreen], signed-in user → the
  * authenticated app tree.
  *
- * [repositoryForUid] is a factory the platform entry point supplies — it knows how to build a
- * per-uid [SplitFoolishRepository] (on Android that needs a Context, on iOS it doesn't). Lifting
- * it to a parameter keeps commonMain free of platform specifics.
+ * [appStateFactory] is a thunk the platform entry point supplies — it knows how to build an
+ * [AppState] with per-uid repositories (SQLite for friends, Firestore for groups). Keeping it
+ * as a parameter rather than wiring platform details into commonMain means neither Android's
+ * Context dependency nor Firebase's platform SDKs leak into this file.
  */
 @Composable
 fun App(
     authState: AuthState,
-    repositoryForUid: (uid: String) -> SplitFoolishRepository,
+    userRegistry: UserRegistry,
+    appStateFactory: (user: AuthUser, scope: kotlinx.coroutines.CoroutineScope) -> AppState,
 ) {
     SplitFoolishTheme {
         Surface(
@@ -46,27 +49,32 @@ fun App(
                 else -> AuthenticatedApp(
                     user = signedIn,
                     authState = authState,
-                    repositoryForUid = repositoryForUid,
+                    userRegistry = userRegistry,
+                    appStateFactory = appStateFactory,
                 )
             }
         }
     }
 }
 
-/**
- * The pre-auth composable tree. `remember(user.uid)` throws away the old [AppState] (and its
- * SQLDelight connection) the moment the signed-in uid changes — switching accounts can't leak
- * data across sessions because each uid has its own database file under the hood.
- */
 @Composable
 private fun AuthenticatedApp(
     user: AuthUser,
     authState: AuthState,
-    repositoryForUid: (uid: String) -> SplitFoolishRepository,
+    userRegistry: UserRegistry,
+    appStateFactory: (user: AuthUser, scope: kotlinx.coroutines.CoroutineScope) -> AppState,
 ) {
     val scope = rememberCoroutineScope()
-    val state = remember(user.uid) {
-        AppState(repo = repositoryForUid(user.uid), scope = scope)
+    val state = remember(user.uid) { appStateFactory(user, scope) }
+
+    // Register this user in /users/{uid} + /users_by_email/{email} so other users can find them
+    // by email in the Add Member dialog. Idempotent — safe to re-run on every sign-in.
+    LaunchedEffect(user.uid) {
+        userRegistry.ensureRegistered(
+            uid = user.uid,
+            email = user.email.orEmpty(),
+            displayName = null,
+        )
     }
 
     when (val screen = state.screen) {
@@ -88,10 +96,8 @@ private fun AuthenticatedApp(
         )
 
         Screen.NewGroup -> NewGroupScreen(
-            friends = state.friends,
-            onAddFriend = { name -> state.addFriend(name) },
-            onCreateGroup = { name, friendIds ->
-                val group = state.createGroupWithFriends(name, friendIds)
+            onCreateGroup = { name ->
+                val group = state.createEmptyGroup(name)
                 state.screen = Screen.GroupDetail(group.id)
             },
             onBack = { state.screen = Screen.GroupsList },
@@ -105,8 +111,10 @@ private fun AuthenticatedApp(
             } else {
                 GroupDetailScreen(
                     group = group,
-                    friends = state.friends,
                     nextId = { state.nextId() },
+                    currentUserUid = user.uid,
+                    onAddMemberByEmail = { email -> state.addMemberByEmail(group, email) },
+                    onDeleteExpense = { expense -> state.deleteExpense(group, expense) },
                     onBack = { state.screen = Screen.GroupsList },
                     onAddExpense = {
                         state.screen = Screen.ExpenseEditor(group.id, expenseId = null)
@@ -128,6 +136,7 @@ private fun AuthenticatedApp(
                     group = group,
                     expenseId = screen.expenseId,
                     nextId = { state.nextId() },
+                    currentUserUid = user.uid,
                     onDone = { state.screen = Screen.GroupDetail(group.id) },
                 )
             }

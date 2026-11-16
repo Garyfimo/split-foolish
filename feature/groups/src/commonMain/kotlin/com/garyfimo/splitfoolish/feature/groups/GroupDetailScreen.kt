@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -28,22 +30,36 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.garyfimo.splitfoolish.core.billsplit.formatCents
 import com.garyfimo.splitfoolish.core.ui.BackIconButton
-import com.garyfimo.splitfoolish.feature.friends.EditableFriend
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
+/**
+ * [onAddMemberByEmail] runs the Firestore users-by-email lookup and attaches the resolved user
+ * to the group. Returns null on success, or a short error message to render inline on failure
+ * ("no such account", "already a member"). The String return keeps :feature:groups free of a
+ * dependency on :shared's result types.
+ *
+ * [currentUserUid] is used to decide which expenses show a delete control — only the user who
+ * created an expense can delete it. See [EditableExpense.createdByUid] for the field, and
+ * firestore.rules at the repo root for the server-side enforcement.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupDetailScreen(
     group: EditableGroup,
-    friends: List<EditableFriend>,
     nextId: () -> String,
+    currentUserUid: String,
+    onAddMemberByEmail: suspend (email: String) -> String?,
+    onDeleteExpense: (EditableExpense) -> Unit,
     onBack: () -> Unit,
     onAddExpense: () -> Unit,
     onEditExpense: (expenseId: String) -> Unit,
@@ -77,6 +93,7 @@ fun GroupDetailScreen(
 
             MembersSection(
                 group = group,
+                currentUserUid = currentUserUid,
                 onAddMember = { showAddMember = true },
                 onRemoveMember = { member ->
                     val impact = group.previewMemberRemoval(member.id)
@@ -90,11 +107,12 @@ fun GroupDetailScreen(
 
             ExpensesSection(
                 group = group,
+                currentUserUid = currentUserUid,
                 onAdd = {
                     if (group.members.isNotEmpty()) onAddExpense()
                 },
                 onEdit = { expense -> onEditExpense(expense.id) },
-                onDelete = { expense -> group.expenses.removeAll { it.id == expense.id } },
+                onDelete = onDeleteExpense,
             )
 
             SettlementSection(group)
@@ -102,14 +120,10 @@ fun GroupDetailScreen(
     }
 
     if (showAddMember) {
-        AddMemberDialog(
-            friends = friends,
-            existingMemberNames = group.members.map { it.name.trim() }.toSet(),
+        AddMemberByEmailDialog(
             onDismiss = { showAddMember = false },
-            onAdd = { name ->
-                group.members.add(EditableMember(nextId(), name))
-                showAddMember = false
-            },
+            onLookup = onAddMemberByEmail,
+            onSuccess = { showAddMember = false },
         )
     }
 
@@ -129,6 +143,7 @@ fun GroupDetailScreen(
 @Composable
 private fun MembersSection(
     group: EditableGroup,
+    currentUserUid: String,
     onAddMember: () -> Unit,
     onRemoveMember: (EditableMember) -> Unit,
 ) {
@@ -141,16 +156,20 @@ private fun MembersSection(
             )
         } else {
             group.members.forEach { member ->
+                val isSelf = member.id == currentUserUid
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
-                        value = member.name,
-                        onValueChange = { member.name = it },
+                        value = member.name + if (isSelf) " (you)" else "",
+                        onValueChange = { /* names are from the Firebase Auth record, not editable here */ },
                         singleLine = true,
+                        enabled = false,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { onRemoveMember(member) }) {
-                        Text("Remove")
+                    if (!isSelf) {
+                        OutlinedButton(onClick = { onRemoveMember(member) }) {
+                            Text("Remove")
+                        }
                     }
                 }
             }
@@ -158,13 +177,14 @@ private fun MembersSection(
         FilledTonalButton(
             onClick = onAddMember,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("+ Add member") }
+        ) { Text("+ Add member by email") }
     }
 }
 
 @Composable
 private fun ExpensesSection(
     group: EditableGroup,
+    currentUserUid: String,
     onAdd: () -> Unit,
     onEdit: (EditableExpense) -> Unit,
     onDelete: (EditableExpense) -> Unit,
@@ -182,6 +202,7 @@ private fun ExpensesSection(
                 ExpenseRow(
                     expense = expense,
                     payerName = group.members.firstOrNull { it.id == expense.payerId }?.name ?: "Unknown",
+                    canDelete = expense.createdByUid == currentUserUid,
                     onEdit = { onEdit(expense) },
                     onDelete = { onDelete(expense) },
                 )
@@ -199,6 +220,7 @@ private fun ExpensesSection(
 private fun ExpenseRow(
     expense: EditableExpense,
     payerName: String,
+    canDelete: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -224,19 +246,16 @@ private fun ExpenseRow(
             }
             Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = onEdit) { Text("Edit") }
-            Spacer(Modifier.width(4.dp))
-            OutlinedButton(onClick = onDelete) { Text("×") }
+            if (canDelete) {
+                Spacer(Modifier.width(4.dp))
+                OutlinedButton(onClick = onDelete) { Text("×") }
+            }
         }
     }
 }
 
 @Composable
 private fun SettlementSection(group: EditableGroup) {
-    // derivedStateOf makes Compose actually re-subscribe to every state read inside the lambda
-    // (amountInput, payerId, splitMode, each participant's `included`, the expenses/members lists).
-    // Without it, EditableGroup is an unstable class without @Stable, so callers of this composable
-    // can skip recomposition even when its contents change — which showed up as the settlement
-    // freezing on an older value after expenses were added or edited.
     val settlement by remember(group) {
         derivedStateOf { computeSettlement(group.toDomain()) }
     }
@@ -305,46 +324,81 @@ private fun ConfirmRemoveMemberDialog(
     )
 }
 
+/**
+ * Dialog that resolves an email to a Firebase Auth uid via [onLookup] and adds that user to
+ * the current group. All feedback stays inline inside the dialog (no snackbar) so the user can
+ * retype after a "no such user" without the dialog disappearing on them.
+ */
 @Composable
-private fun AddMemberDialog(
-    friends: List<EditableFriend>,
-    existingMemberNames: Set<String>,
+private fun AddMemberByEmailDialog(
     onDismiss: () -> Unit,
-    onAdd: (String) -> Unit,
+    onLookup: suspend (email: String) -> String?,
+    onSuccess: () -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    // Hide friends whose name is already in the group — their row wouldn't do anything useful.
-    val pickable = friends.filter { it.name.trim().isNotEmpty() && it.name.trim() !in existingMemberNames }
+    var email by remember { mutableStateOf("") }
+    var inFlight by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val canSubmit = !inFlight && email.trim().isNotBlank()
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add member") },
+        onDismissRequest = { if (!inFlight) onDismiss() },
+        title = { Text("Add member by email") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (pickable.isNotEmpty()) {
-                    Text("Pick a friend", style = MaterialTheme.typography.labelLarge)
-                    pickable.forEach { friend ->
-                        OutlinedButton(
-                            onClick = { onAdd(friend.name.trim()) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(friend.name.trim()) }
-                    }
-                    Text("Or type a name", style = MaterialTheme.typography.labelLarge)
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
+                Text(
+                    "The person must already have a SplitFoolish account for their email to resolve.",
+                    style = MaterialTheme.typography.bodySmall,
                 )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it; errorMessage = null },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    enabled = !inFlight,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                errorMessage?.let { msg ->
+                    Text(
+                        msg,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (name.isNotBlank()) onAdd(name.trim()) },
-                enabled = name.isNotBlank(),
-            ) { Text("Add") }
+                enabled = canSubmit,
+                onClick = {
+                    inFlight = true
+                    errorMessage = null
+                    scope.launch {
+                        // try/finally guarantees the spinner stops even if onLookup throws an
+                        // unexpected exception the suspend contract was supposed to have caught.
+                        // Without this the dialog would stay spinning forever on an escaped throw.
+                        try {
+                            val err = onLookup(email)
+                            if (err == null) onSuccess() else errorMessage = err
+                        } catch (t: Throwable) {
+                            errorMessage = "Something went wrong: ${t.message ?: t::class.simpleName}"
+                        } finally {
+                            inFlight = false
+                        }
+                    }
+                },
+            ) {
+                if (inFlight) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.width(16.dp))
+                } else {
+                    Text("Add")
+                }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !inFlight) { Text("Cancel") }
+        },
     )
 }

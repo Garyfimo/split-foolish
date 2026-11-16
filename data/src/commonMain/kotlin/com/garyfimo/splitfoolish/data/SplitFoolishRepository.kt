@@ -60,6 +60,11 @@ internal class SqlSplitFoolishRepository(
                         payerId = expenseRow.payer_id,
                         splitMode = expenseRow.split_mode,
                         participants = participantsByExpense[expenseRow.id].orEmpty(),
+                        // SQLite path is the local-only / pre-Firestore path. The legacy schema
+                        // has no creator column, so hydrate as "unknown"; AppState.toEditable()
+                        // falls back to the signed-in user for empty values, and Firestore writes
+                        // thereafter carry the real creator forward.
+                        createdByUid = "",
                     )
                 }
             }
@@ -68,6 +73,7 @@ internal class SqlSplitFoolishRepository(
             PersistedGroup(
                 id = groupRow.id,
                 name = groupRow.name,
+                createdByUid = "",
                 members = membersByGroup[groupRow.id].orEmpty(),
                 expenses = expensesByGroup[groupRow.id].orEmpty(),
             )

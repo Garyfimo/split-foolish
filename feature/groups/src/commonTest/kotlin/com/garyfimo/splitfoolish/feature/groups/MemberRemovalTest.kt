@@ -8,8 +8,10 @@ import kotlin.test.assertTrue
 
 class MemberRemovalTest {
 
+    private val testCreator = "m10"
+
     private fun buildGroup(): EditableGroup {
-        val group = EditableGroup(id = "g1", name = "Trip")
+        val group = EditableGroup(id = "g1", name = "Trip", createdByUid = testCreator)
         group.members.add(EditableMember(id = "m10", name = "Alice"))
         group.members.add(EditableMember(id = "m11", name = "Bob"))
         group.members.add(EditableMember(id = "m12", name = "Charlie"))
@@ -33,6 +35,7 @@ class MemberRemovalTest {
                 participants = amongIds.map {
                     EditableExpenseParticipant(it, included = true, percentInput = "")
                 },
+                createdByUid = testCreator,
             )
         )
     }

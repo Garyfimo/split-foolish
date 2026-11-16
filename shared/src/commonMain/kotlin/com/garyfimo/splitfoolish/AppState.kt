@@ -14,7 +14,9 @@ import com.garyfimo.splitfoolish.data.PersistedExpenseParticipant
 import com.garyfimo.splitfoolish.data.PersistedFriend
 import com.garyfimo.splitfoolish.data.PersistedGroup
 import com.garyfimo.splitfoolish.data.PersistedMember
-import com.garyfimo.splitfoolish.data.SplitFoolishRepository
+import com.garyfimo.splitfoolish.data.RegisteredUser
+import com.garyfimo.splitfoolish.data.SyncedRepository
+import com.garyfimo.splitfoolish.data.UserRegistry
 import com.garyfimo.splitfoolish.feature.friends.EditableFriend
 import com.garyfimo.splitfoolish.feature.groups.EditableExpense
 import com.garyfimo.splitfoolish.feature.groups.EditableExpenseParticipant
@@ -23,28 +25,28 @@ import com.garyfimo.splitfoolish.feature.groups.EditableMember
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
  * Root coordinator for the whole app. Owns the nav state plus the two cross-feature collections
- * (friends and groups). Lives in :shared because this is the only module that depends on both
- * features and can see all of their types at once; the features themselves don't know about each
- * other (groups depends on friends only for the EditableFriend type).
+ * (friends and groups).
  *
- * Persistence model: [repo] is the authoritative store. On construction we kick off a hydrate
- * pass that fills the editable collections from disk, then install a [snapshotFlow] watcher that
- * serialises the entire tree and writes it back on every Compose state change. That "save the
- * whole world on every edit" approach is wasteful on paper but at this app's scale (dozens of
- * groups max) it's imperceptibly fast and sidesteps every partial-write bug. When Firebase sync
- * lands we'll switch to granular writes; the UUID-string ids are already in the right shape.
- *
- * All ids are UUID strings generated client-side at creation time so an offline-created record
- * already owns its final, stable id — nothing to translate when cloud sync shows up.
+ * Persistence model: [repo] blends local SQLite (friends) with Firestore (groups + expenses).
+ * [observeSnapshot] emits whenever Firestore pushes an update — the init block populates the
+ * editable collections on every emission, so remote changes from another device propagate here.
+ * A second coroutine watches local Compose state changes via [snapshotFlow] and writes them
+ * back; it debounces to avoid writing on every keystroke, and skips writes when the serialised
+ * state exactly equals what we last received or sent (break the sync loop).
  */
 @OptIn(ExperimentalUuidApi::class)
 class AppState(
-    private val repo: SplitFoolishRepository,
+    private val repo: SyncedRepository,
+    private val userRegistry: UserRegistry,
+    private val currentUserUid: String,
+    private val currentUserName: String,
     private val scope: CoroutineScope,
 ) {
     fun nextId(): String = Uuid.random().toString()
@@ -53,19 +55,56 @@ class AppState(
     val groups: SnapshotStateList<EditableGroup> = mutableStateListOf()
     val friends: SnapshotStateList<EditableFriend> = mutableStateListOf()
 
+    /** Latest snapshot this instance has either received from or sent to [repo]. Used to break
+     *  the write-after-read loop: a captured local snapshot that equals this is a no-op write. */
+    private var lastSyncedSnapshot: AppSnapshot? = null
+
     init {
         scope.launch {
-            // Hydrate must complete before the snapshotFlow watcher subscribes; otherwise the
-            // mid-hydration state changes would trigger a cascade of save-snapshot calls each
-            // writing a half-loaded world back to disk.
-            hydrate(repo.loadSnapshot())
-
-            // drop(1) discards the initial emission, which by definition equals what we just
-            // loaded from disk. Every subsequent emission is a real user edit worth persisting.
+            // Collect live Firestore updates. First emission hydrates the UI; subsequent
+            // emissions are remote changes (another device added an expense, member joined, etc.).
+            // Wrapped in runCatching because Firestore emits a terminal error into the flow if
+            // permissions are rejected or the network stays down — on K/N that otherwise reaches
+            // propagateExceptionFinalResort and tears down the composition. Swallowing here keeps
+            // the app alive on cached data until the next successful connection.
+            runCatching {
+                repo.observeSnapshot().collect { snapshot ->
+                    applyRemoteSnapshot(snapshot)
+                }
+            }
+        }
+        scope.launch {
+            // Write-through: any local Compose state change → push to repo after settling.
+            // drop(1) skips the empty initial state before any remote emission has arrived.
+            // distinctUntilChanged + lastSyncedSnapshot check together break the Firestore
+            // read→apply→write→read loop. Per-emission runCatching so a single failed write
+            // doesn't terminate the collector — the next local edit will retry on its own.
             snapshotFlow { captureSnapshot() }
                 .drop(1)
-                .collect { repo.saveSnapshot(it) }
+                .debounce(500)
+                .distinctUntilChanged()
+                .collect { local ->
+                    if (local != lastSyncedSnapshot) {
+                        val saved = runCatching { repo.saveSnapshot(local) }
+                        if (saved.isSuccess) lastSyncedSnapshot = local
+                    }
+                }
         }
+    }
+
+    private fun applyRemoteSnapshot(snapshot: AppSnapshot) {
+        // Replace friends list (local source of truth is this device's SQLite — remote friends
+        // should always equal local friends; this is just a defensive refresh).
+        friends.clear()
+        snapshot.friends.forEach { friends.add(EditableFriend(it.id, it.name)) }
+
+        // Replace groups list wholesale. Any in-flight local edits to a currently-displayed
+        // group will be lost on remote update — MVP cost; a per-field reconciliation layer
+        // would preserve them but adds a lot of complexity for occasional conflicts.
+        groups.clear()
+        snapshot.groups.forEach { groups.add(it.toEditable()) }
+
+        lastSyncedSnapshot = snapshot
     }
 
     fun addFriend(name: String): EditableFriend {
@@ -78,40 +117,88 @@ class AppState(
         friends.removeAll { it.id == id }
     }
 
+    /**
+     * Create an empty group with the current user as the sole real-user member. The friend
+     * picker is no longer part of group creation — invite other members from the group detail
+     * screen by email once the group exists.
+     */
+    fun createEmptyGroup(name: String): EditableGroup {
+        val group = EditableGroup(nextId(), name, createdByUid = currentUserUid)
+        group.members.add(EditableMember(id = currentUserUid, name = currentUserName))
+        groups.add(group)
+        return group
+    }
+
     fun deleteGroup(id: String) {
         groups.removeAll { it.id == id }
+        // Also issue an explicit Firestore delete — write-through above only writes upserts,
+        // never figures out what was removed. Fire-and-forget; the local removal above makes
+        // the UI feel instant. The try/catch matters because rememberCoroutineScope() installs
+        // a non-supervisor Job: an uncaught FirebaseFirestoreException (rule rejection, network
+        // drop) would otherwise propagate up and tear down the composition.
+        scope.launch {
+            runCatching { repo.deleteGroup(id) }
+        }
     }
 
     fun findGroup(id: String): EditableGroup? = groups.firstOrNull { it.id == id }
 
     /**
-     * Create a new group with the given name, pre-populated with members copied from the given
-     * friend ids. Member names are snapshot-copied — no reference link between members and
-     * friends — see docs on [EditableFriend] for why.
+     * Delete an expense. UI should already have hidden the delete control for non-creators;
+     * this is a defence-in-depth check so a mis-wired call site can't bypass it. Firestore
+     * security rules enforce the same constraint server-side so even a compromised client
+     * can't delete someone else's expense.
      */
-    fun createGroupWithFriends(name: String, friendIds: List<String>): EditableGroup {
-        val group = EditableGroup(nextId(), name)
-        friendIds.forEach { friendId ->
-            val friend = friends.firstOrNull { it.id == friendId } ?: return@forEach
-            group.members.add(EditableMember(nextId(), friend.name.trim()))
+    fun deleteExpense(group: EditableGroup, expense: EditableExpense) {
+        if (expense.createdByUid != currentUserUid) return
+        group.expenses.removeAll { it.id == expense.id }
+        // Same reasoning as deleteGroup — swallow Firestore errors rather than crashing the UI.
+        // The local removal above already applied; a rule rejection here just means the server
+        // state and local state will diverge until the next observeSnapshot emission reconciles.
+        scope.launch {
+            runCatching { repo.deleteExpense(group.id, expense.id) }
         }
-        groups.add(group)
-        return group
     }
 
-    private fun hydrate(snapshot: AppSnapshot) {
-        friends.clear()
-        snapshot.friends.forEach { friends.add(EditableFriend(it.id, it.name)) }
-        groups.clear()
-        snapshot.groups.forEach { groups.add(it.toEditable()) }
+    /**
+     * Look up a user by email in the Firestore users_by_email registry and add them to the
+     * given group. Returns null on success; otherwise a short error message the UI renders
+     * inline. Keeping this as a String return avoids leaking a result type into :feature:groups,
+     * which doesn't depend on :shared or :data.
+     *
+     * The Firestore lookup can throw (PERMISSION_DENIED if rules haven't been deployed, the
+     * token.email guard rejects us, Firestore isn't enabled on the project, or the network is
+     * unreachable). We turn those into a user-visible string rather than letting them propagate
+     * — the caller invokes this inside a plain scope.launch on iOS, where an uncaught throw
+     * reaches K/N's propagateExceptionFinalResort and crashes the composition.
+     */
+    suspend fun addMemberByEmail(group: EditableGroup, email: String): String? {
+        val lookup: RegisteredUser = try {
+            userRegistry.lookupByEmail(email)
+        } catch (t: Throwable) {
+            return "Couldn't reach the user directory: ${t.message ?: t::class.simpleName ?: "unknown error"}"
+        } ?: return "No SplitFoolish account with that email."
+
+        if (group.members.any { it.id == lookup.uid }) {
+            return "They're already in this group."
+        }
+        val displayName = lookup.displayName?.takeIf { it.isNotBlank() } ?: lookup.email
+        group.members.add(EditableMember(id = lookup.uid, name = displayName))
+        return null
     }
 
     private fun PersistedGroup.toEditable(): EditableGroup {
-        val group = EditableGroup(id = id, name = name)
+        // createdByUid now flows end-to-end from Firestore → CloudGroup → PersistedGroup, so we
+        // use the real creator uid here. Fall back to the current user only for the legacy
+        // local-only path where the Persisted DTO was written with an empty creator — that's
+        // the pre-Firestore case and the fallback matches what we push to the cloud below.
+        val group = EditableGroup(
+            id = id,
+            name = name,
+            createdByUid = createdByUid.ifBlank { currentUserUid },
+        )
         members.forEach { group.members.add(EditableMember(it.id, it.name)) }
         expenses.forEach { expense ->
-            // Defensive: if the stored string doesn't match an enum constant (e.g. a future
-            // rename or a hand-edited db), fall back to Equal so one bad row doesn't crash load.
             val splitMode = runCatching { SplitMode.valueOf(expense.splitMode) }
                 .getOrDefault(SplitMode.Equal)
             group.expenses.add(
@@ -128,6 +215,9 @@ class AppState(
                             percentInput = it.percentInput,
                         )
                     },
+                    // Preserve the real creator — this is the field the delete-permission UI
+                    // check reads, so getting it wrong here is what the review flagged.
+                    createdByUid = expense.createdByUid.ifBlank { currentUserUid },
                 )
             )
         }
@@ -142,6 +232,7 @@ class AppState(
     private fun EditableGroup.toPersisted(): PersistedGroup = PersistedGroup(
         id = id,
         name = name,
+        createdByUid = createdByUid,
         members = members.map { PersistedMember(it.id, it.name) },
         expenses = expenses.map { exp ->
             PersistedExpense(
@@ -157,8 +248,9 @@ class AppState(
                         percentInput = it.percentInput,
                     )
                 },
+                createdByUid = exp.createdByUid,
             )
         },
     )
-
 }
+

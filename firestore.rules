@@ -1,0 +1,103 @@
+rules_version = '2';
+
+// SplitFoolish Firestore security rules.
+//
+// Deploy with `firebase deploy --only firestore:rules` from this directory. The rules enforce
+// what the client-side UI also presents, but live server-side so a compromised or rebuilt client
+// can't bypass them (defence in depth).
+//
+// Model recap:
+//   /users/{uid}               — canonical user record (own-user read+write).
+//   /users_by_email/{email}    — reverse index so other users can find you by email.
+//   /groups/{groupId}          — multi-member group; members[] lists uid+name, memberUids[] is
+//                                the flat uid list used for array-contains queries.
+//   /groups/{groupId}/expenses/{expenseId}
+//                              — per-expense docs. createdByUid is pinned at creation and used
+//                                to enforce the "only the creator can delete it" rule.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Signed-in state guard. Used everywhere; rules without `isSignedIn()` would allow anonymous
+    // reads, and Firestore defaults to open-unless-rules-say-otherwise once you deploy any rules.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Users directory: each account owns its own /users/{uid} doc. Any signed-in user can fetch
+    // a specific user's doc by uid (so we can show display names in group member lists), but
+    // list is intentionally NOT granted — rules language treats `allow read` as get+list, so a
+    // single `allow read` would let any signed-in client dump the entire users collection
+    // (email, uid, displayName for every account). Splitting into `allow get` closes that
+    // enumeration path while keeping the per-uid lookup the app actually needs.
+    match /users/{uid} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Email reverse index. Same get-only shape as /users above to deny bulk email dumps. On
+    // write we additionally require the document id (`emailKey`) to match the caller's own
+    // authenticated email — without that check a signed-in user could write
+    // /users_by_email/alice@victim.com with { uid: <self> }, hijacking any invite flow that
+    // resolves "alice@victim.com" → uid. `request.auth.token.email` is the Firebase-attested
+    // email claim, so it can't be spoofed by a malicious client. `.lower()` matches what
+    // UserRegistry.ensureRegistered does client-side.
+    match /users_by_email/{emailKey} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.auth.token.email != null
+        && emailKey == request.auth.token.email.lower();
+    }
+
+    // Groups: only accessible to members. On create we additionally require the caller to be
+    // the declared creator AND to be in the initial memberUids list (prevents creating a group
+    // owned by someone else, or a group with no permitted writers). Reads and updates require
+    // the caller to be in the current memberUids list; update additionally pins the fields that
+    // an existing member must not be able to rewrite — without those pins any member could
+    // reassign createdByUid to themselves, or drop everyone else from memberUids and take the
+    // group over.
+    match /groups/{groupId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.auth.uid in request.resource.data.memberUids;
+
+      // createdByUid is immutable after creation; the creator must remain a member (prevents
+      // kicking the owner out, which would otherwise lock them out of their own group). Members
+      // can still be added or removed otherwise — the add-by-email flow needs that freedom.
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && resource.data.createdByUid in request.resource.data.memberUids;
+
+      allow delete: if isSignedIn()
+        && request.auth.uid in resource.data.memberUids;
+
+      // Expenses: readable + writable by any group member. Delete is restricted to the user who
+      // originally created the expense. The matching update rule pins createdByUid so a member
+      // can't reassign ownership to themselves and then delete someone else's expense — that
+      // bypass is the whole reason this guard exists (see PR #10 review comment).
+      match /expenses/{expenseId} {
+        function groupData() {
+          return get(/databases/$(database)/documents/groups/$(groupId)).data;
+        }
+        function isMember() {
+          return isSignedIn() && request.auth.uid in groupData().memberUids;
+        }
+
+        allow read: if isMember();
+
+        allow create: if isMember()
+          && request.resource.data.createdByUid == request.auth.uid;
+
+        allow update: if isMember()
+          && request.resource.data.createdByUid == resource.data.createdByUid;
+
+        allow delete: if isMember()
+          && request.auth.uid == resource.data.createdByUid;
+      }
+    }
+  }
+}
