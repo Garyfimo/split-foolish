@@ -110,8 +110,13 @@ service cloud.firestore {
         && (request.auth.uid == resource.data.createdByUid
             || request.resource.data.memberUids.hasAll(resource.data.memberUids));
 
+      // Only the group creator can delete the group. Previously any member could, which
+      // meant any member could destroy the group AND every other member's expense history
+      // under it in one call. This matches the "non-owner cannot shrink memberUids" guard on
+      // update: removing yourself from the group is a form of shrinking, and deleting the
+      // group outright is a strictly more destructive version of the same intent.
       allow delete: if isSignedIn()
-        && request.auth.uid in resource.data.memberUids;
+        && request.auth.uid == resource.data.createdByUid;
 
       // Expenses: readable + writable by any group member. Delete is restricted to the user who
       // originally created the expense. The matching update rule pins createdByUid so a member

@@ -211,6 +211,15 @@ class AppState(
     }
 
     fun deleteGroup(id: String) {
+        // Creator-only guard — mirrors the Firestore delete rule. UI should already have hidden
+        // the Delete button for non-creators (see GroupsListScreen.GroupRow), but keep this check
+        // as defence in depth: without it a non-creator tap would locally remove the group,
+        // trigger a PERMISSION_DENIED on the Firestore delete, and the group would flicker back
+        // on the next observeSnapshot emission — confusing UX. Silent return matches the
+        // deleteExpense pattern for the same reason.
+        val group = groups.firstOrNull { it.id == id } ?: return
+        if (group.createdByUid != currentUserUid) return
+
         groups.removeAll { it.id == id }
         // Also issue an explicit Firestore delete — write-through above only writes upserts,
         // never figures out what was removed. Fire-and-forget; the local removal above makes

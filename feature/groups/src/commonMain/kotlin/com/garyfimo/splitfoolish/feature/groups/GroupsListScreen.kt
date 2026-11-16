@@ -34,6 +34,10 @@ import androidx.compose.ui.unit.dp
 fun GroupsListScreen(
     groups: List<EditableGroup>,
     friendCount: Int,
+    // Firebase auth uid of the signed-in user. Used to gate the per-row Delete button to
+    // groups the viewer actually created — Firestore's delete rule rejects anyone else, so
+    // showing the button to non-creators would produce a silent-failure tap.
+    currentUserUid: String,
     onOpenFriends: () -> Unit,
     onOpenGroup: (groupId: String) -> Unit,
     onDeleteGroup: (groupId: String) -> Unit,
@@ -80,6 +84,7 @@ fun GroupsListScreen(
                 groups.forEach { group ->
                     GroupRow(
                         group = group,
+                        canDelete = group.createdByUid == currentUserUid,
                         onOpen = { onOpenGroup(group.id) },
                         onDelete = { onDeleteGroup(group.id) },
                     )
@@ -97,6 +102,7 @@ fun GroupsListScreen(
 @Composable
 private fun GroupRow(
     group: EditableGroup,
+    canDelete: Boolean,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -129,8 +135,15 @@ private fun GroupRow(
             }
             Spacer(Modifier.width(8.dp))
             Button(onClick = onOpen) { Text("Open") }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = onDelete) { Text("Delete") }
+            // Delete button only renders when the viewer created the group. Matches the
+            // Firestore rule (`request.auth.uid == resource.data.createdByUid`) and the
+            // AppState.deleteGroup guard — showing the button to non-creators would produce
+            // a silent-failure tap (local removal + Firestore PERMISSION_DENIED + flicker-
+            // back on the next observeSnapshot emission).
+            if (canDelete) {
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = onDelete) { Text("Delete") }
+            }
         }
     }
 }

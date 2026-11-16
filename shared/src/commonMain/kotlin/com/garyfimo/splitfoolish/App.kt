@@ -80,6 +80,7 @@ private fun AuthenticatedApp(
         Screen.GroupsList -> GroupsListScreen(
             groups = state.groups,
             friendCount = state.friends.size,
+            currentUserUid = user.uid,
             onOpenFriends = { state.screen = Screen.Friends },
             onOpenGroup = { groupId -> state.screen = Screen.GroupDetail(groupId) },
             onDeleteGroup = { groupId -> state.deleteGroup(groupId) },
