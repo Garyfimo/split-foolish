@@ -92,12 +92,23 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.memberUids;
 
       // createdByUid is immutable after creation; the creator must remain a member (prevents
-      // kicking the owner out, which would otherwise lock them out of their own group). Members
-      // can still be added or removed otherwise — the add-by-email flow needs that freedom.
+      // kicking the owner out, which would otherwise lock them out of their own group).
+      //
+      // Only the group creator can SHRINK memberUids — i.e. remove anyone from the group. A non-
+      // creator can still write updates (rename the group, add new members via the add-by-email
+      // flow) but their write must preserve every existing uid. Expressed as: either you're the
+      // creator, or the new memberUids list contains all of the old ones (hasAll is the Firestore
+      // rules "superset-or-equal" operator — true iff nothing was removed).
+      //
+      // This also incidentally blocks self-leave for non-creators, which matches the current UX
+      // (there's no "leave group" affordance; the creator-only Delete-group button is how you get
+      // out of a group you don't own — ask the owner).
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.memberUids
         && request.resource.data.createdByUid == resource.data.createdByUid
-        && resource.data.createdByUid in request.resource.data.memberUids;
+        && resource.data.createdByUid in request.resource.data.memberUids
+        && (request.auth.uid == resource.data.createdByUid
+            || request.resource.data.memberUids.hasAll(resource.data.memberUids));
 
       allow delete: if isSignedIn()
         && request.auth.uid in resource.data.memberUids;
