@@ -126,8 +126,12 @@ class AppState(
         groups.removeAll { it.id == id }
         // Also issue an explicit Firestore delete — write-through above only writes upserts,
         // never figures out what was removed. Fire-and-forget; the local removal above makes
-        // the UI feel instant.
-        scope.launch { repo.deleteGroup(id) }
+        // the UI feel instant. The try/catch matters because rememberCoroutineScope() installs
+        // a non-supervisor Job: an uncaught FirebaseFirestoreException (rule rejection, network
+        // drop) would otherwise propagate up and tear down the composition.
+        scope.launch {
+            runCatching { repo.deleteGroup(id) }
+        }
     }
 
     fun findGroup(id: String): EditableGroup? = groups.firstOrNull { it.id == id }
@@ -141,7 +145,12 @@ class AppState(
     fun deleteExpense(group: EditableGroup, expense: EditableExpense) {
         if (expense.createdByUid != currentUserUid) return
         group.expenses.removeAll { it.id == expense.id }
-        scope.launch { repo.deleteExpense(group.id, expense.id) }
+        // Same reasoning as deleteGroup — swallow Firestore errors rather than crashing the UI.
+        // The local removal above already applied; a rule rejection here just means the server
+        // state and local state will diverge until the next observeSnapshot emission reconciles.
+        scope.launch {
+            runCatching { repo.deleteExpense(group.id, expense.id) }
+        }
     }
 
     /**
@@ -162,12 +171,15 @@ class AppState(
     }
 
     private fun PersistedGroup.toEditable(): EditableGroup {
-        // PersistedGroup doesn't carry createdByUid (it's a legacy DTO shared with SQLite). We
-        // ask the cloud layer to re-attribute to current user on push, and for hydration we
-        // can't recover the true creator — but the only use of createdByUid in the editable
-        // tree is for the delete-expense check, which uses EditableExpense.createdByUid (set
-        // correctly below from the Persisted version).
-        val group = EditableGroup(id = id, name = name, createdByUid = currentUserUid)
+        // createdByUid now flows end-to-end from Firestore → CloudGroup → PersistedGroup, so we
+        // use the real creator uid here. Fall back to the current user only for the legacy
+        // local-only path where the Persisted DTO was written with an empty creator — that's
+        // the pre-Firestore case and the fallback matches what we push to the cloud below.
+        val group = EditableGroup(
+            id = id,
+            name = name,
+            createdByUid = createdByUid.ifBlank { currentUserUid },
+        )
         members.forEach { group.members.add(EditableMember(it.id, it.name)) }
         expenses.forEach { expense ->
             val splitMode = runCatching { SplitMode.valueOf(expense.splitMode) }
@@ -186,9 +198,9 @@ class AppState(
                             percentInput = it.percentInput,
                         )
                     },
-                    // No createdByUid in PersistedExpense; attribute to the signed-in user on
-                    // first hydration. Firestore writes will carry the correct value forward.
-                    createdByUid = currentUserUid,
+                    // Preserve the real creator — this is the field the delete-permission UI
+                    // check reads, so getting it wrong here is what the review flagged.
+                    createdByUid = expense.createdByUid.ifBlank { currentUserUid },
                 )
             )
         }
@@ -203,6 +215,7 @@ class AppState(
     private fun EditableGroup.toPersisted(): PersistedGroup = PersistedGroup(
         id = id,
         name = name,
+        createdByUid = createdByUid,
         members = members.map { PersistedMember(it.id, it.name) },
         expenses = expenses.map { exp ->
             PersistedExpense(
@@ -218,6 +231,7 @@ class AppState(
                         percentInput = it.percentInput,
                     )
                 },
+                createdByUid = exp.createdByUid,
             )
         },
     )

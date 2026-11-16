@@ -69,6 +69,7 @@ class SyncedRepository(
 private fun CloudGroup.toPersisted(): PersistedGroup = PersistedGroup(
     id = id,
     name = name,
+    createdByUid = createdByUid,
     members = members.map { PersistedMember(id = it.uid, name = it.name) },
     expenses = expenses.map { it.toPersisted() },
 )
@@ -86,15 +87,17 @@ private fun CloudExpense.toPersisted(): PersistedExpense = PersistedExpense(
             percentInput = it.percentInput,
         )
     },
+    createdByUid = createdByUid,
 )
 
 private fun PersistedGroup.toCloud(createdByUidDefault: String): CloudGroup = CloudGroup(
     id = id,
     name = name,
-    // Groups created pre-Firestore don't carry a createdByUid in the local snapshot; attribute
-    // to the current signed-in user on first push. Groups that already exist in Firestore keep
-    // whatever createdByUid they had because upsertGroup overwrites with the value in CloudGroup.
-    createdByUid = createdByUidDefault,
+    // Prefer the group's own createdByUid — Firestore-hydrated groups carry the real owner.
+    // Fall back to the current user only for the pre-Firestore local path where the field is
+    // genuinely unknown (empty). This is what prevents a non-creator's write-through from
+    // flipping ownership — and lets the server-side "createdByUid pinned on update" rule pass.
+    createdByUid = createdByUid.ifBlank { createdByUidDefault },
     members = members.map { CloudMember(uid = it.id, name = it.name) },
     expenses = expenses.map { it.toCloud(createdByUidDefault) },
 )
@@ -112,5 +115,5 @@ private fun PersistedExpense.toCloud(createdByUidDefault: String): CloudExpense 
             percentInput = it.percentInput,
         )
     },
-    createdByUid = createdByUidDefault,
+    createdByUid = createdByUid.ifBlank { createdByUidDefault },
 )

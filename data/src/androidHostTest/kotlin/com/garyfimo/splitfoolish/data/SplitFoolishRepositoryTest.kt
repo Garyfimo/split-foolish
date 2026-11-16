@@ -52,6 +52,9 @@ class SplitFoolishRepositoryTest {
                 PersistedGroup(
                     id = "g1",
                     name = "Trip",
+                    // SQLite schema has no creator column, so the round-trip loads back empty.
+                    // Match that here so equality on the whole structure still holds.
+                    createdByUid = "",
                     members = listOf(
                         PersistedMember(id = "m1", name = "Alice"),
                         PersistedMember(id = "m2", name = "Bob"),
@@ -67,6 +70,7 @@ class SplitFoolishRepositoryTest {
                                 PersistedExpenseParticipant("m1", included = true, percentInput = ""),
                                 PersistedExpenseParticipant("m2", included = true, percentInput = ""),
                             ),
+                            createdByUid = "",
                         ),
                     ),
                 ),
@@ -111,6 +115,7 @@ class SplitFoolishRepositoryTest {
                     PersistedGroup(
                         id = "g1",
                         name = "Trip",
+                        createdByUid = "",
                         members = listOf(PersistedMember("m1", "Alice")),
                         expenses = listOf(
                             PersistedExpense(
@@ -122,6 +127,7 @@ class SplitFoolishRepositoryTest {
                                 participants = listOf(
                                     PersistedExpenseParticipant("m1", included = true, percentInput = ""),
                                 ),
+                                createdByUid = "",
                             ),
                         ),
                     ),

@@ -19,6 +19,12 @@ data class PersistedFriend(
 data class PersistedGroup(
     val id: String,
     val name: String,
+    // Firebase auth uid of the user who originally created the group. Threaded end-to-end from
+    // Firestore so remote-hydrated groups keep their real owner — without this field we'd have
+    // to re-attribute on every hydration (defaulting to the signed-in user) which both fails
+    // the server-side "createdByUid pinned on update" rule and corrupts ownership. Empty string
+    // means "unknown" (legacy / pre-Firestore local data); the cloud-layer fallback fills it in.
+    val createdByUid: String,
     val members: List<PersistedMember>,
     val expenses: List<PersistedExpense>,
 )
@@ -35,6 +41,12 @@ data class PersistedExpense(
     val payerId: String,
     val splitMode: String,
     val participants: List<PersistedExpenseParticipant>,
+    // Auth uid of the user who created the expense. This is the field the UI's delete-control
+    // visibility check depends on; previously the Persisted type dropped it, which meant every
+    // remote-hydrated expense was mis-attributed to the signed-in user and the "only creator
+    // can delete" guarantee collapsed on receiver devices. Empty string → unknown (local-only
+    // path); SyncedRepository fills it from CloudExpense on the Firestore path.
+    val createdByUid: String,
 )
 
 data class PersistedExpenseParticipant(
