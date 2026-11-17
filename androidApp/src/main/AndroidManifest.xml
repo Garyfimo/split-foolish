@@ -10,11 +10,30 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:exported="true"
+            android:launchMode="singleTask"
             android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Shareable invite deep link. The user taps a hosted https URL on the Firebase
+                 Hosting redirect page; that page runs JS that attempts to navigate to the
+                 splitfoolish:// scheme below. Android catches the custom-scheme navigation
+                 here and routes it into MainActivity, which pulls the token out in onNewIntent
+                 and forwards it to the DeepLinkBridge. launchMode="singleTask" keeps us from
+                 spawning a second MainActivity on top of the existing one.
+
+                 The hosted https URL is NOT verified as an App Link here: verifying would
+                 require publishing an assetlinks.json under the hosting domain tied to the
+                 app's package signature. Rather than take that on, we accept that tapping the
+                 hosted URL opens the browser first, and the redirect page bridges it over. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="splitfoolish" android:host="invite" />
             </intent-filter>
         </activity>
     </application>

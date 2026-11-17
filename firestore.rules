@@ -19,6 +19,15 @@ rules_version = '2';
 //   /groups/{groupId}/expenses/{expenseId}
 //                              — per-expense docs. createdByUid is pinned at creation and used
 //                                to enforce the "only the creator can delete it" rule.
+//   /groups/{groupId}/joinRedemptions/{uid}
+//                              — "I accepted an invite for this group" audit doc. Its create
+//                                rule is the gate that makes a shareable invite link safe:
+//                                writing it requires presenting a valid, unexpired invite token
+//                                in the body, so the rule can verify the invite in /invites/{t}.
+//   /invites/{token}           — one doc per invite link. Token is an unguessable id. Readable
+//                                by any signed-in user who happens to possess the id (not list-
+//                                able — the whole security argument depends on the id staying
+//                                secret). Create is restricted to the target group's creator.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -104,11 +113,28 @@ service cloud.firestore {
       // (there's no "leave group" affordance; the creator-only Delete-group button is how you get
       // out of a group you don't own — ask the owner).
       allow update: if isSignedIn()
-        && request.auth.uid in resource.data.memberUids
-        && request.resource.data.createdByUid == resource.data.createdByUid
-        && resource.data.createdByUid in request.resource.data.memberUids
-        && (request.auth.uid == resource.data.createdByUid
-            || request.resource.data.memberUids.hasAll(resource.data.memberUids));
+        && (
+            // Member-authored update: the path all existing writes take. Unchanged from before.
+            (request.auth.uid in resource.data.memberUids
+              && request.resource.data.createdByUid == resource.data.createdByUid
+              && resource.data.createdByUid in request.resource.data.memberUids
+              && (request.auth.uid == resource.data.createdByUid
+                  || request.resource.data.memberUids.hasAll(resource.data.memberUids)))
+            // Self-join via invite redemption: a non-member can add themselves (and ONLY
+            // themselves, with nothing else about the group changed) iff a joinRedemptions
+            // sub-doc under their own uid already exists. That sub-doc's create rule (below)
+            // is what verified the invite token, so by the time the caller gets here the
+            // "do they have a valid invite?" question has already been answered. Pinning
+            // name + createdByUid against the pre-image is what stops someone from using
+            // the self-join branch to rename the group or grab ownership.
+            || (!(request.auth.uid in resource.data.memberUids)
+                && request.auth.uid in request.resource.data.memberUids
+                && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+                && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+                && request.resource.data.name == resource.data.name
+                && request.resource.data.createdByUid == resource.data.createdByUid
+                && exists(/databases/$(database)/documents/groups/$(groupId)/joinRedemptions/$(request.auth.uid)))
+          );
 
       // Only the group creator can delete the group. Previously any member could, which
       // meant any member could destroy the group AND every other member's expense history
@@ -117,6 +143,29 @@ service cloud.firestore {
       // group outright is a strictly more destructive version of the same intent.
       allow delete: if isSignedIn()
         && request.auth.uid == resource.data.createdByUid;
+
+      // joinRedemptions: audit sub-docs that serve as the server-side proof that someone
+      // presented a valid invite before being added to the group. One doc per accepting uid,
+      // keyed by that uid so the group's self-add rule above can `exists()` it directly.
+      //
+      // Create is the only interesting rule here: it's where the invite token's validity is
+      // actually checked. The caller must:
+      //   • be creating their OWN doc (uid key must match their auth uid)
+      //   • include a token field whose referenced invite doc exists
+      //   • prove the invite is actually for this group (prevents using a different group's
+      //     token on this group — rules check both ends)
+      //   • prove the invite hasn't expired
+      // Read is intentionally omitted — no caller needs to list these; the rule above does an
+      // exists() check which doesn't need read. Keeping it closed denies audit-log enumeration.
+      // Delete is also omitted: redemption records are append-only.
+      match /joinRedemptions/{acceptingUid} {
+        allow create: if isSignedIn()
+          && acceptingUid == request.auth.uid
+          && request.resource.data.token is string
+          && exists(/databases/$(database)/documents/invites/$(request.resource.data.token))
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.token)).data.groupId == groupId
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.token)).data.expiresAt > request.time;
+      }
 
       // Expenses: readable + writable by any group member. Delete is restricted to the user who
       // originally created the expense. The matching update rule pins createdByUid so a member
@@ -141,6 +190,33 @@ service cloud.firestore {
         allow delete: if isMember()
           && request.auth.uid == resource.data.createdByUid;
       }
+    }
+
+    // Invites: one doc per shareable join link, keyed by an unguessable token the client
+    // generates with Uuid.random. The security argument rests on the token staying secret —
+    // `allow list` is deliberately NOT granted, so there's no way to walk the collection; the
+    // only way to discover an invite is to already hold its token.
+    //
+    // get: any signed-in user can read an invite they possess (needed to resolve a tapped link
+    //      to a groupId + preview). The invite doc intentionally includes groupName so the
+    //      accept screen can render it without first joining the group — a non-member can't
+    //      read the /groups doc because of the memberUids guard, so the group's name has to
+    //      travel with the invite.
+    // create: the signed-in user creating the invite must (a) point createdByUid at themselves
+    //      and (b) actually be the group's creator — same gate as the group's delete rule. We
+    //      look up the group doc to check its createdByUid rather than trusting what the
+    //      caller passes, because the caller's `request.resource.data.groupId` is their input.
+    // delete: the invite's creator can revoke it by deleting the doc.
+    // update: deliberately omitted. An invite is set-once content; renewing means delete + create.
+    match /invites/{token} {
+      allow get: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.groupId is string
+        && request.resource.data.expiresAt is timestamp
+        && get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdByUid == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.createdByUid == request.auth.uid;
     }
   }
 }

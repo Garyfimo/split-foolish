@@ -34,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -59,12 +61,14 @@ fun GroupDetailScreen(
     nextId: () -> String,
     currentUserUid: String,
     onAddMemberByEmail: suspend (email: String) -> String?,
+    onCreateInviteLink: suspend () -> Result<String>,
     onDeleteExpense: (EditableExpense) -> Unit,
     onBack: () -> Unit,
     onAddExpense: () -> Unit,
     onEditExpense: (expenseId: String) -> Unit,
 ) {
     var showAddMember by remember { mutableStateOf(false) }
+    var showInviteLink by remember { mutableStateOf(false) }
     var memberPendingRemoval by remember { mutableStateOf<EditableMember?>(null) }
 
     Scaffold(
@@ -100,7 +104,9 @@ fun GroupDetailScreen(
                 group = group,
                 currentUserUid = currentUserUid,
                 canRemove = isOwner,
+                canInviteByLink = isOwner,
                 onAddMember = { showAddMember = true },
+                onInviteByLink = { showInviteLink = true },
                 onRemoveMember = { member ->
                     val impact = group.previewMemberRemoval(member.id)
                     if (impact.isDestructive) {
@@ -133,6 +139,13 @@ fun GroupDetailScreen(
         )
     }
 
+    if (showInviteLink) {
+        InviteLinkDialog(
+            onDismiss = { showInviteLink = false },
+            onCreateLink = onCreateInviteLink,
+        )
+    }
+
     memberPendingRemoval?.let { member ->
         ConfirmRemoveMemberDialog(
             member = member,
@@ -151,7 +164,9 @@ private fun MembersSection(
     group: EditableGroup,
     currentUserUid: String,
     canRemove: Boolean,
+    canInviteByLink: Boolean,
     onAddMember: () -> Unit,
+    onInviteByLink: () -> Unit,
     onRemoveMember: (EditableMember) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -188,6 +203,15 @@ private fun MembersSection(
             onClick = onAddMember,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("+ Add member by email") }
+        // Owner-only "Invite with link" entry point. Hidden for non-owners because the
+        // Firestore rule on /invites/{token} rejects creates from anyone who isn't the group's
+        // createdByUid — showing the button would mean showing a Button that silently fails.
+        if (canInviteByLink) {
+            FilledTonalButton(
+                onClick = onInviteByLink,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Invite with link") }
+        }
     }
 }
 
@@ -331,6 +355,104 @@ private fun ConfirmRemoveMemberDialog(
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Dialog that creates a 7-day shareable invite link and shows the resulting URL with a Copy
+ * button. Issues the Firestore create once on first composition (not on every recomposition —
+ * LaunchedEffect with Unit key). Error path renders inline so the user can retry.
+ *
+ * The link is not revealed before the create succeeds, which also means no Copy button renders
+ * for the empty state — users can't share a URL that doesn't exist server-side.
+ */
+@Composable
+private fun InviteLinkDialog(
+    onDismiss: () -> Unit,
+    onCreateLink: suspend () -> Result<String>,
+) {
+    var link by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var inFlight by remember { mutableStateOf(true) }
+    val clipboard = LocalClipboardManager.current
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        // Same scope-vs-crash reasoning as AddMemberByEmailDialog: the suspend call can throw
+        // a Firestore exception, and on K/N an uncaught throw tears down the composition. The
+        // try/catch here plus the Result wrapper give us a clean error state to render.
+        try {
+            onCreateLink().fold(
+                onSuccess = { link = it },
+                onFailure = { t ->
+                    error = t.message ?: t::class.simpleName ?: "Couldn't create invite link."
+                },
+            )
+        } catch (t: Throwable) {
+            error = t.message ?: t::class.simpleName ?: "Couldn't create invite link."
+        } finally {
+            inFlight = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Invite with link") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when {
+                    inFlight -> {
+                        Text(
+                            "Creating a link that expires in 7 days…",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.width(20.dp),
+                        )
+                    }
+
+                    error != null -> Text(
+                        error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+
+                    link != null -> {
+                        Text(
+                            "Anyone with this link can join the group for 7 days. Share it " +
+                                "with people you trust.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        // Read-only field so the user can see AND select the URL manually on
+                        // platforms where the OS clipboard integration might not fire — the
+                        // Copy button is the happy path.
+                        OutlinedTextField(
+                            value = link!!,
+                            onValueChange = { /* read-only */ },
+                            singleLine = true,
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (link != null) {
+                TextButton(onClick = {
+                    // AnnotatedString is Compose MP's cross-platform clipboard payload. iOS maps
+                    // to UIPasteboard.general, Android to ClipboardManager — the same call works
+                    // on both without the shared code touching a platform SDK.
+                    clipboard.setText(AnnotatedString(link!!))
+                    onDismiss()
+                }) { Text("Copy & close") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = if (link != null) {
+            { TextButton(onClick = onDismiss) { Text("Close") } }
+        } else null,
     )
 }
 

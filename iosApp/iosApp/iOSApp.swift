@@ -20,6 +20,15 @@ struct iOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Deep-link entry for shareable invite URLs. iOS delivers the URL here
+                // whether the app was launched cold by tapping the splitfoolish:// scheme
+                // or was already running. We hand the raw absolute string to the shared
+                // Kotlin module's top-level `submitInviteUrl` — the Kotlin side filters
+                // for invite URLs and forwards into the DeepLinkBridge the Compose app
+                // is observing.
+                .onOpenURL { url in
+                    MainViewControllerKt.submitInviteUrl(url: url.absoluteString)
+                }
         }
     }
 }
