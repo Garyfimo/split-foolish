@@ -4,6 +4,7 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -71,6 +72,15 @@ class FirestoreGroupRepository {
                     }.getOrNull()
                 }
             }
+            // When the owner removes a viewer from the parent group's memberUids, the expense
+            // sub-collection's isMember() rule starts rejecting this listen and Firestore delivers
+            // PERMISSION_DENIED as a terminal error. Without this catch, that error propagates
+            // through combine() → flatMapLatest → observeSnapshot's collector in AppState, where
+            // runCatching swallows it and the collector dies — leaving the removed viewer with a
+            // stale groups list that never refreshes. Emit an empty list instead so combine stays
+            // alive; the outer memberUids array-contains query will drop the group on its own next
+            // evaluation, which then tears down this flow via flatMapLatest.
+            .catch { emit(emptyList()) }
 
     /** Upsert a whole group doc (name, members[], memberUids[]). Doesn't touch the expense sub. */
     suspend fun upsertGroup(group: CloudGroup) {

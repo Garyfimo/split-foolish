@@ -91,9 +91,15 @@ fun GroupDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // Removing members is a creator-only action. Mirrors the Firestore rule which rejects
+            // any non-creator write that shrinks memberUids — without this UI gate a non-owner
+            // would see a Remove button that silently fails on save. Add is still open to any
+            // member so the "collaborate to build the group" flow keeps working.
+            val isOwner = group.createdByUid == currentUserUid
             MembersSection(
                 group = group,
                 currentUserUid = currentUserUid,
+                canRemove = isOwner,
                 onAddMember = { showAddMember = true },
                 onRemoveMember = { member ->
                     val impact = group.previewMemberRemoval(member.id)
@@ -144,6 +150,7 @@ fun GroupDetailScreen(
 private fun MembersSection(
     group: EditableGroup,
     currentUserUid: String,
+    canRemove: Boolean,
     onAddMember: () -> Unit,
     onRemoveMember: (EditableMember) -> Unit,
 ) {
@@ -166,7 +173,10 @@ private fun MembersSection(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    if (!isSelf) {
+                    // Remove button only renders when the viewer is the group owner AND the row
+                    // is for someone else. Non-owners never see it; owners don't see it on their
+                    // own row (owner can't leave their own group — Firestore rule also enforces).
+                    if (canRemove && !isSelf) {
                         OutlinedButton(onClick = { onRemoveMember(member) }) {
                             Text("Remove")
                         }

@@ -2,7 +2,6 @@ package com.garyfimo.splitfoolish
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,6 +80,7 @@ private fun AuthenticatedApp(
         Screen.GroupsList -> GroupsListScreen(
             groups = state.groups,
             friendCount = state.friends.size,
+            currentUserUid = user.uid,
             onOpenFriends = { state.screen = Screen.Friends },
             onOpenGroup = { groupId -> state.screen = Screen.GroupDetail(groupId) },
             onDeleteGroup = { groupId -> state.deleteGroup(groupId) },
@@ -121,10 +121,18 @@ private fun AuthenticatedApp(
 
         is Screen.GroupDetail -> {
             val group = state.findGroup(screen.groupId)
-            if (group == null) {
-                state.screen = Screen.GroupsList
-                Text("Group not found")
-            } else {
+            // LaunchedEffect-based navigation instead of writing state in the composable body
+            // (the old `state.screen = ...` directly during composition is an anti-pattern that
+            // fires on every recomposition). This path also handles the "viewer was removed from
+            // the group" case: owner removes them → Firestore writes new memberUids → removed
+            // user's array-contains query re-evaluates → observeSnapshot emits without this
+            // group → applyRemoteSnapshot drops it → findGroup returns null → this effect fires
+            // → they land on Screen.GroupsList. No "you were kicked" dialog needed; the nav back
+            // to home is the signal.
+            LaunchedEffect(group == null) {
+                if (group == null) state.screen = Screen.GroupsList
+            }
+            if (group != null) {
                 GroupDetailScreen(
                     group = group,
                     nextId = { state.nextId() },
@@ -144,10 +152,13 @@ private fun AuthenticatedApp(
 
         is Screen.ExpenseEditor -> {
             val group = state.findGroup(screen.groupId)
-            if (group == null) {
-                state.screen = Screen.GroupsList
-                Text("Group not found")
-            } else {
+            // Same removed-mid-flow protection as GroupDetail above. If the viewer was editing
+            // an expense in a group they just got kicked from, snap them home rather than keeping
+            // them in an editor backed by a stale group reference.
+            LaunchedEffect(group == null) {
+                if (group == null) state.screen = Screen.GroupsList
+            }
+            if (group != null) {
                 ExpenseEditorScreen(
                     group = group,
                     expenseId = screen.expenseId,
