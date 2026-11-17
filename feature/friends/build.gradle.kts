@@ -31,5 +31,11 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        // Compose UI tests live under src/iosTest/ because the Android host test target (JVM
+        // unit tests) can't run them without Robolectric + a main-thread looper setup. The iOS
+        // sim target is the Compose UI test harness the project supports today.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }
