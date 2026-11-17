@@ -14,4 +14,12 @@ sealed class Screen {
     data object Settings : Screen()
     data class GroupDetail(val groupId: String) : Screen()
     data class ExpenseEditor(val groupId: String, val expenseId: String?) : Screen()
+
+    /**
+     * Shareable-invite-link landing. [token] is the invite id from the tapped URL; the
+     * AcceptInviteScreen resolves it to a group name + accept action. Routed to from the
+     * deep-link bridge in App.kt when a `splitfoolish://invite/<token>` (or hosted-page
+     * equivalent) URL is handed to the app on cold start or while running.
+     */
+    data class AcceptInvite(val token: String) : Screen()
 }

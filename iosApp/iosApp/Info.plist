@@ -4,5 +4,29 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!--
+	  Shareable invite deep link. CFBundleURLSchemes registers the "splitfoolish" custom
+	  scheme so iOS routes splitfoolish://invite/<token> URLs to this app. The hosted
+	  https landing page on Firebase Hosting runs a tiny bit of JS that navigates to the
+	  custom scheme; that's what triggers iOS to switch over to this app and fire our
+	  .onOpenURL handler in iOSApp.swift. We deliberately do NOT register the hosted
+	  https URL as a Universal Link here — that would require publishing an apple-app-
+	  site-association file tied to this app's Team ID, plus adding the Associated
+	  Domains capability. The hybrid "browser redirect page" approach sidesteps that
+	  whole setup for v1 of this feature.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.garyfimo.splitfoolish.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>splitfoolish</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

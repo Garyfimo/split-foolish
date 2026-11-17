@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join a SplitFoolish group</title>
+  <meta name="robots" content="noindex">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #111111;
+      --muted: #666666;
+      --accent: #0a84ff;
+      --card: #f5f5f7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111111;
+        --fg: #f7f7f7;
+        --muted: #a0a0a0;
+        --accent: #0a84ff;
+        --card: #1c1c1e;
+      }
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    main {
+      background: var(--card);
+      padding: 24px;
+      border-radius: 14px;
+      max-width: 420px;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 8px 0; }
+    p { color: var(--muted); font-size: 15px; line-height: 1.4; margin: 8px 0; }
+    .btn {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      padding: 10px 18px;
+      border-radius: 10px;
+      text-decoration: none;
+      margin-top: 12px;
+      font-weight: 600;
+    }
+    .fallback { margin-top: 20px; display: none; }
+    .fallback a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Opening SplitFoolish…</h1>
+    <p id="status">Switching you into the app.</p>
+    <a id="openApp" class="btn" href="#">Open in SplitFoolish</a>
+    <div class="fallback" id="fallback">
+      <p>Didn't open? You can get SplitFoolish from the stores:</p>
+      <p>
+        <!-- Store links go here once we have shipping builds; the href placeholders keep the
+             layout visible in the meantime. The feature works end-to-end for users who already
+             have the app; non-installers simply see this page. -->
+        <a href="#">App Store</a> &nbsp;·&nbsp; <a href="#">Google Play</a>
+      </p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      // Extract the token from the URL path. Firebase Hosting's /i/** → /i.html rewrite
+      // preserves the original URL, so window.location.pathname still looks like /i/<token>.
+      // Parse defensively: slice off the /i/ prefix, drop any trailing slashes and query/hash
+      // remnants, and validate non-empty before using. Any garbage path renders the fallback.
+      var path = window.location.pathname || '';
+      var marker = '/i/';
+      var idx = path.indexOf(marker);
+      var token = '';
+      if (idx >= 0) {
+        token = path.substring(idx + marker.length).replace(/\/+$/, '');
+      }
+
+      var openBtn = document.getElementById('openApp');
+      var fallback = document.getElementById('fallback');
+      var status = document.getElementById('status');
+
+      if (!token) {
+        status.textContent = "This invite link doesn't look valid.";
+        openBtn.style.display = 'none';
+        fallback.style.display = 'block';
+        return;
+      }
+
+      var deepLink = 'splitfoolish://invite/' + encodeURIComponent(token);
+      openBtn.setAttribute('href', deepLink);
+
+      // Try to open the app immediately. If the OS routes the URL to the installed app, the
+      // page navigation away handles everything. If nothing is listening, iOS/Android stays
+      // on this page; the setTimeout reveals the fallback after a short grace period.
+      setTimeout(function () { window.location.href = deepLink; }, 80);
+      setTimeout(function () {
+        // By this point, if the app was opened, the browser tab is backgrounded. We show the
+        // fallback unconditionally — it's harmless in the "app opened" case (the user won't
+        // see it), and helpful otherwise. Document.hidden would be more precise but mobile
+        // browsers handle it inconsistently.
+        fallback.style.display = 'block';
+        status.textContent = 'Tap the button above if the app didn’t open.';
+      }, 1500);
+    })();
+  </script>
+</body>
+</html>

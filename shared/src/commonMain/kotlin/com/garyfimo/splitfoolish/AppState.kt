@@ -9,6 +9,9 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import com.garyfimo.splitfoolish.core.billsplit.SplitMode
 import com.garyfimo.splitfoolish.core.nav.Screen
 import com.garyfimo.splitfoolish.data.AppSnapshot
+import com.garyfimo.splitfoolish.data.FirestoreInviteRepository
+import com.garyfimo.splitfoolish.data.GroupInvite
+import com.garyfimo.splitfoolish.data.InviteAcceptResult
 import com.garyfimo.splitfoolish.data.PersistedExpense
 import com.garyfimo.splitfoolish.data.PersistedExpenseParticipant
 import com.garyfimo.splitfoolish.data.PersistedFriend
@@ -19,6 +22,7 @@ import com.garyfimo.splitfoolish.data.SyncedRepository
 import com.garyfimo.splitfoolish.data.UserProfile
 import com.garyfimo.splitfoolish.data.UserRegistry
 import com.garyfimo.splitfoolish.data.UsernameClaimResult
+import com.garyfimo.splitfoolish.data.inviteLinkFor
 import com.garyfimo.splitfoolish.feature.friends.EditableFriend
 import com.garyfimo.splitfoolish.feature.groups.EditableExpense
 import com.garyfimo.splitfoolish.feature.groups.EditableExpenseParticipant
@@ -47,6 +51,7 @@ import kotlinx.coroutines.launch
 class AppState(
     private val repo: SyncedRepository,
     private val userRegistry: UserRegistry,
+    private val invites: FirestoreInviteRepository,
     private val currentUserUid: String,
     private val currentUserName: String,
     private val scope: CoroutineScope,
@@ -262,6 +267,57 @@ class AppState(
      * — the caller invokes this inside a plain scope.launch on iOS, where an uncaught throw
      * reaches K/N's propagateExceptionFinalResort and crashes the composition.
      */
+    // ----- Shareable invite links --------------------------------------------------------------
+
+    /**
+     * Create a 7-day invite link for [group]. Owner-only — mirrors the Firestore rule on
+     * /invites/{token} which gates create on `get(group).createdByUid == auth.uid`. Returns
+     * null + a user-facing message on failure (non-owner, or Firestore error — an iOS K/N
+     * uncaught throw would otherwise crash the composition).
+     */
+    suspend fun createInviteLink(group: EditableGroup): Result<String> {
+        if (group.createdByUid != currentUserUid) {
+            return Result.failure(IllegalStateException("Only the group owner can create invite links."))
+        }
+        return try {
+            val invite = invites.createInvite(
+                groupId = group.id,
+                groupName = group.name,
+                ownerUid = currentUserUid,
+            )
+            Result.success(inviteLinkFor(invite.token))
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    /**
+     * Resolve an invite token to a preview so the AcceptInviteScreen can show "Join
+     * <groupName>?" before the user commits. Returns null if no such invite exists (bad
+     * token, revoked). Firestore errors are turned into null + message via [Result] because
+     * the UI distinguishes "not found" (null) from "network error" (failure).
+     */
+    suspend fun previewInvite(token: String): Result<GroupInvite?> =
+        runCatching { invites.lookupInvite(token) }
+
+    /**
+     * Accept the invite at [token] on behalf of the signed-in user. Delegates to the data
+     * layer; the Result enum describes which outcome the UI should render. Suspends until
+     * both Firestore writes land in the offline cache (the actual server round-trip finishes
+     * asynchronously after that — our observeSnapshot collector will surface the new group
+     * on its next emission).
+     */
+    suspend fun acceptInvite(token: String): InviteAcceptResult {
+        val displayName = profile?.displayName?.takeIf { it.isNotBlank() }
+            ?: profile?.username
+            ?: currentUserName
+        return invites.acceptInvite(
+            token = token,
+            acceptingUid = currentUserUid,
+            acceptingUserDisplayName = displayName,
+        )
+    }
+
     suspend fun addMemberByEmail(group: EditableGroup, email: String): String? {
         val lookup: RegisteredUser = try {
             userRegistry.lookupByEmail(email)
